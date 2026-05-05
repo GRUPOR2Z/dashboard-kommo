@@ -1,0 +1,2 @@
+/proxy/*  https://nutrijosiaspapa.kommo.com/api/v4/:splat  200!
+/*        /index.html                                        200

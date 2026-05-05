@@ -1,0 +1,14 @@
+Options -Indexes
+RewriteEngine On
+
+# Repassa o header Authorization para o PHP (necessário em alguns servidores Apache)
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Redireciona /proxy/* para o proxy.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^proxy/(.*)$ proxy.php?kommo_path=$1 [QSA,L]
+
+# SPA fallback — qualquer rota desconhecida serve o index.html (necessário para o React Router)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]

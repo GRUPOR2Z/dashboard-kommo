@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(curl -s \"http://localhost:3001/proxy/account\" -H \"Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjBlY2Y2YTNhZWE5NDMzNmJmODQ2YmM4NDUyOGExNGExNzBiMjUxOWI3YzgwYzEyOGE4YjlkOGQ5NDQ5ZjczMzY1ZjVjNTYxYzk3ODljOTNlIn0.eyJhdWQiOiI4MTAzZmUzYS0xZjI5LTQwNGQtYjM4MS1lYzk1NWQzZTcyZDkiLCJqdGkiOiIwZWNmNmEzYWVhOTQzMzZiZjg0NmJjODQ1MjhhMTRhMTcwYjI1MTliN2M4MGMxMjhhOGI5ZDhkOTQ0OWY3MzM2NWY1YzU2MWM5Nzg5YzkzZSIsImlhdCI6MTc3NjMwOTg5MywibmJmIjoxNzc2MzA5ODkzLCJleHAiOjE4NDMzNDQwMDAsInN1YiI6IjE0Njg5MDI3IiwiZ3JhbnRfdHlwZSI6IiIsImFjY291bnRfaWQiOjM1OTc4NTcxLCJiYXNlX2RvbWFpbiI6ImtvbW1vLmNvbSIsInZlcnNpb24iOjIsInNjb3BlcyI6WyJwdXNoX25vdGlmaWNhdGlvbnMiLCJmaWxlcyIsImNybSIsImZpbGVzX2RlbGV0ZSIsIm5vdGlmaWNhdGlvbnMiXSwiaGFzaF91dWlkIjoiZGNjNzYxYjEtMjE2OC00YjA1LWI5NjUtZDRiM2EyMjJkZjZiIiwiYXBpX2RvbWFpbiI6ImFwaS1nLmtvbW1vLmNvbSJ9.GqKkTPeZ_weRev3tkYgXkx41oJSzAFX0G9ghaDJ_JFgDbXfqYt2SOu-hexDOdZw3eypF_s57iqCuV-wjXtT3mNgyODEOxp8Wz1lDVYKRuX0VCrMmOzJEJVnH1Oe9xdfq-qS9_l0ejXtnMcwUA--0IPtTw25lvQoniLB9bLh_j8h51npfHPsjyd4WCXcwmMJfryIyQiU14rLS4yMnhrWb2I3uxFwwwx38ZKbvDQRPwkRljvlNPyJMcEhp2cJ3ZiIVSTSIg87CGTVt3dJP1QZ3L9eIt5sdxn5ORF68cnV9-VBK89O2D-mJMIZ5nYDdGUZ2q7n5mxk8U8vewmfi-afCJQ\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"http://localhost:3001/proxy/leads/custom_fields\" -H \"Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjBlY2Y2YTNhZWE5NDMzNmJmODQ2YmM4NDUyOGExNGExNzBiMjUxOWI3YzgwYzEyOGE4YjlkOGQ5NDQ5ZjczMzY1ZjVjNTYxYzk3ODljOTNlIn0.eyJhdWQiOiI4MTAzZmUzYS0xZjI5LTQwNGQtYjM4MS1lYzk1NWQzZTcyZDkiLCJqdGkiOiIwZWNmNmEzYWVhOTQzMzZiZjg0NmJjODQ1MjhhMTRhMTcwYjI1MTliN2M4MGMxMjhhOGI5ZDhkOTQ0OWY3MzM2NWY1YzU2MWM5Nzg5YzkzZSIsImlhdCI6MTc3NjMwOTg5MywibmJmIjoxNzc2MzA5ODkzLCJleHAiOjE4NDMzNDQwMDAsInN1YiI6IjE0Njg5MDI3IiwiZ3JhbnRfdHlwZSI6IiIsImFjY291bnRfaWQiOjM1OTc4NTcxLCJiYXNlX2RvbWFpbiI6ImtvbW1vLmNvbSIsInZlcnNpb24iOjIsInNjb3BlcyI6WyJwdXNoX25vdGlmaWNhdGlvbnMiLCJmaWxlcyIsImNybSIsImZpbGVzX2RlbGV0ZSIsIm5vdGlmaWNhdGlvbnMiXSwiaGFzaF91dWlkIjoiZGNjNzYxYjEtMjE2OC00YjA1LWI5NjUtZDRiM2EyMjJkZjZiIiwiYXBpX2RvbWFpbiI6ImFwaS1nLmtvbW1vLmNvbSJ9.GqKkTPeZ_weRev3tkYgXkx41oJSzAFX0G9ghaDJ_JFgDbXfqYt2SOu-hexDOdZw3eypF_s57iqCuV-wjXtT3mNgyODEOxp8Wz1lDVYKRuX0VCrMmOzJEJVnH1Oe9xdfq-qS9_l0ejXtnMcwUA--0IPtTw25lvQoniLB9bLh_j8h51npfHPsjyd4WCXcwmMJfryIyQiU14rLS4yMnhrWb2I3uxFwwwx38ZKbvDQRPwkRljvlNPyJMcEhp2cJ3ZiIVSTSIg87CGTVt3dJP1QZ3L9eIt5sdxn5ORF68cnV9-VBK89O2D-mJMIZ5nYDdGUZ2q7n5mxk8U8vewmfi-afCJQ\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(f'{f[\\\\\"id\\\\\"]:>10}  {f[\\\\\"name\\\\\"]}'\\) for f in d.get\\('_embedded',{}\\).get\\('custom_fields',[]\\)]\")",
+      "Bash(curl -s \"http://localhost:3001/proxy/leads?limit=5&with=contacts\" -H \"Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjBlY2Y2YTNhZWE5NDMzNmJmODQ2YmM4NDUyOGExNGExNzBiMjUxOWI3YzgwYzEyOGE4YjlkOGQ5NDQ5ZjczMzY1ZjVjNTYxYzk3ODljOTNlIn0.eyJhdWQiOiI4MTAzZmUzYS0xZjI5LTQwNGQtYjM4MS1lYzk1NWQzZTcyZDkiLCJqdGkiOiIwZWNmNmEzYWVhOTQzMzZiZjg0NmJjODQ1MjhhMTRhMTcwYjI1MTliN2M4MGMxMjhhOGI5ZDhkOTQ0OWY3MzM2NWY1YzU2MWM5Nzg5YzkzZSIsImlhdCI6MTc3NjMwOTg5MywibmJmIjoxNzc2MzA5ODkzLCJleHAiOjE4NDMzNDQwMDAsInN1YiI6IjE0Njg5MDI3IiwiZ3JhbnRfdHlwZSI6IiIsImFjY291bnRfaWQiOjM1OTc4NTcxLCJiYXNlX2RvbWFpbiI6ImtvbW1vLmNvbSIsInZlcnNpb24iOjIsInNjb3BlcyI6WyJwdXNoX25vdGlmaWNhdGlvbnMiLCJmaWxlcyIsImNybSIsImZpbGVzX2RlbGV0ZSIsIm5vdGlmaWNhdGlvbnMiXSwiaGFzaF91dWlkIjoiZGNjNzYxYjEtMjE2OC00YjA1LWI5NjUtZDRiM2EyMjJkZjZiIiwiYXBpX2RvbWFpbiI6ImFwaS1nLmtvbW1vLmNvbSJ9.GqKkTPeZ_weRev3tkYgXkx41oJSzAFX0G9ghaDJ_JFgDbXfqYt2SOu-hexDOdZw3eypF_s57iqCuV-wjXtT3mNgyODEOxp8Wz1lDVYKRuX0VCrMmOzJEJVnH1Oe9xdfq-qS9_l0ejXtnMcwUA--0IPtTw25lvQoniLB9bLh_j8h51npfHPsjyd4WCXcwmMJfryIyQiU14rLS4yMnhrWb2I3uxFwwwx38ZKbvDQRPwkRljvlNPyJMcEhp2cJ3ZiIVSTSIg87CGTVt3dJP1QZ3L9eIt5sdxn5ORF68cnV9-VBK89O2D-mJMIZ5nYDdGUZ2q7n5mxk8U8vewmfi-afCJQ\")",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:3001/\")",
+      "Bash(curl -s 'http://localhost:3001/proxy/events?filter[type][]=lead_status_changed&limit=3' -H 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjBlY2Y2YTNhZWE5NDMzNmJmODQ2YmM4NDUyOGExNGExNzBiMjUxOWI3YzgwYzEyOGE4YjlkOGQ5NDQ5ZjczMzY1ZjVjNTYxYzk3ODljOTNlIn0.eyJhdWQiOiI4MTAzZmUzYS0xZjI5LTQwNGQtYjM4MS1lYzk1NWQzZTcyZDkiLCJqdGkiOiIwZWNmNmEzYWVhOTQzMzZiZjg0NmJjODQ1MjhhMTRhMTcwYjI1MTliN2M4MGMxMjhhOGI5ZDhkOTQ0OWY3MzM2NWY1YzU2MWM5Nzg5YzkzZSIsImlhdCI6MTc3NjMwOTg5MywibmJmIjoxNzc2MzA5ODkzLCJleHAiOjE4NDMzNDQwMDAsInN1YiI6IjE0Njg5MDI3IiwiZ3JhbnRfdHlwZSI6IiIsImFjY291bnRfaWQiOjM1OTc4NTcxLCJiYXNlX2RvbWFpbiI6ImtvbW1vLmNvbSIsInZlcnNpb24iOjIsInNjb3BlcyI6WyJwdXNoX25vdGlmaWNhdGlvbnMiLCJmaWxlcyIsImNybSIsImZpbGVzX2RlbGV0ZSIsIm5vdGlmaWNhdGlvbnMiXSwiaGFzaF91dWlkIjoiZGNjNzYxYjEtMjE2OC00YjA1LWI5NjUtZDRiM2EyMjJkZjZiIiwiYXBpX2RvbWFpbiI6ImFwaS1nLmtvbW1vLmNvbSJ9.GqKkTPeZ_weRev3tkYgXkx41oJSzAFX0G9ghaDJ_JFgDbXfqYt2SOu-hexDOdZw3eypF_s57iqCuV-wjXtT3mNgyODEOxp8Wz1lDVYKRuX0VCrMmOzJEJVnH1Oe9xdfq-qS9_l0ejXtnMcwUA--0IPtTw25lvQoniLB9bLh_j8h51npfHPsjyd4WCXcwmMJfryIyQiU14rLS4yMnhrWb2I3uxFwwwx38ZKbvDQRPwkRljvlNPyJMcEhp2cJ3ZiIVSTSIg87CGTVt3dJP1QZ3L9eIt5sdxn5ORF68cnV9-VBK89O2D-mJMIZ5nYDdGUZ2q7n5mxk8U8vewmfi-afCJQ')",
+      "Bash(curl -s 'https://nutrijosiaspapa.kommo.com/api/v4/events?filter[type][]=lead_status_changed&limit=3' -H 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjBlY2Y2YTNhZWE5NDMzNmJmODQ2YmM4NDUyOGExNGExNzBiMjUxOWI3YzgwYzEyOGE4YjlkOGQ5NDQ5ZjczMzY1ZjVjNTYxYzk3ODljOTNlIn0.eyJhdWQiOiI4MTAzZmUzYS0xZjI5LTQwNGQtYjM4MS1lYzk1NWQzZTcyZDkiLCJqdGkiOiIwZWNmNmEzYWVhOTQzMzZiZjg0NmJjODQ1MjhhMTRhMTcwYjI1MTliN2M4MGMxMjhhOGI5ZDhkOTQ0OWY3MzM2NWY1YzU2MWM5Nzg5YzkzZSIsImlhdCI6MTc3NjMwOTg5MywibmJmIjoxNzc2MzA5ODkzLCJleHAiOjE4NDMzNDQwMDAsInN1YiI6IjE0Njg5MDI3IiwiZ3JhbnRfdHlwZSI6IiIsImFjY291bnRfaWQiOjM1OTc4NTcxLCJiYXNlX2RvbWFpbiI6ImtvbW1vLmNvbSIsInZlcnNpb24iOjIsInNjb3BlcyI6WyJwdXNoX25vdGlmaWNhdGlvbnMiLCJmaWxlcyIsImNybSIsImZpbGVzX2RlbGV0ZSIsIm5vdGlmaWNhdGlvbnMiXSwiaGFzaF91dWlkIjoiZGNjNzYxYjEtMjE2OC00YjA1LWI5NjUtZDRiM2EyMjJkZjZiIiwiYXBpX2RvbWFpbiI6ImFwaS1nLmtvbW1vLmNvbSJ9.GqKkTPeZ_weRev3tkYgXkx41oJSzAFX0G9ghaDJ_JFgDbXfqYt2SOu-hexDOdZw3eypF_s57iqCuV-wjXtT3mNgyODEOxp8Wz1lDVYKRuX0VCrMmOzJEJVnH1Oe9xdfq-qS9_l0ejXtnMcwUA--0IPtTw25lvQoniLB9bLh_j8h51npfHPsjyd4WCXcwmMJfryIyQiU14rLS4yMnhrWb2I3uxFwwwx38ZKbvDQRPwkRljvlNPyJMcEhp2cJ3ZiIVSTSIg87CGTVt3dJP1QZ3L9eIt5sdxn5ORF68cnV9-VBK89O2D-mJMIZ5nYDdGUZ2q7n5mxk8U8vewmfi-afCJQ')",
+      "Bash(curl *)",
+      "Bash(npm install *)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "mcp__supabase__list_projects",
+      "mcp__supabase__apply_migration",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__deploy_edge_function",
+      "mcp__supabase__get_logs",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "mcp__supabase__get_project",
+      "WebFetch(domain:uazapi.com)",
+      "WebFetch(domain:docs.uazapi.com)",
+      "WebFetch(domain:grupor2z.uazapi.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:uazapi.dev)",
+      "Bash(git checkout *)",
+      "Bash(git branch *)"
+    ]
+  }
+}
