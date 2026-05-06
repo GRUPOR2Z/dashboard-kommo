@@ -57,7 +57,7 @@ function AppShell() {
       <div className="flex flex-1 overflow-hidden">
         {user && <SideNav />}
 
-        <main className="flex-1 overflow-hidden flex flex-col">
+        <main className="flex-1 overflow-y-auto flex flex-col">
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
