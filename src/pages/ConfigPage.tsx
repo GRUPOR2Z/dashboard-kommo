@@ -1,14 +1,33 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Save, RefreshCw, CheckCircle, AlertCircle, Search, Plus, Trash2 } from "lucide-react";
 import { getConfig, saveConfig, resetConfig } from "../lib/config";
 import type { AppConfig, ExtraField } from "../lib/config";
 import { testConnection, fetchCustomFields } from "../lib/kommo-api";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function ConfigPage() {
+  const { user } = useAuth();
   const [config, setConfig] = useState<AppConfig>(getConfig());
   const [extraFields, setExtraFields] = useState<ExtraField[]>(getConfig().extraFields);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Load api_token from Supabase on mount so the field shows the current saved value
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("client_configs")
+      .select("api_token")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.api_token && data.api_token !== "pendente") {
+          setConfig((c) => ({ ...c, apiToken: data.api_token }));
+        }
+      });
+  }, [user?.id]);
 
   const {
     data: connData,
@@ -34,7 +53,20 @@ export default function ConfigPage() {
     retry: 0,
   });
 
-  function handleSave() {
+  async function handleSave() {
+    setSaveError(null);
+    // Save api_token to Supabase so the proxy can read it
+    if (user) {
+      const { error } = await supabase
+        .from("client_configs")
+        .update({ api_token: config.apiToken })
+        .eq("user_id", user.id);
+      if (error) {
+        setSaveError("Erro ao salvar token: " + error.message);
+        return;
+      }
+    }
+    // Save remaining config to localStorage
     saveConfig({ ...config, extraFields });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -313,6 +345,13 @@ export default function ConfigPage() {
       </Section>
 
       {/* Actions */}
+      {saveError && (
+        <div className="flex items-center gap-2 text-sm" style={{ color: "#f85149" }}>
+          <AlertCircle size={14} />
+          {saveError}
+        </div>
+      )}
+
       <div className="flex items-center gap-3 pb-4">
         <button
           onClick={handleSave}

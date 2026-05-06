@@ -8,6 +8,7 @@ interface ClientConfigValue {
   subdomain: string;
   pipelines: PipelineConfig;
   fieldIds: FieldConfig;
+  uazapiUrl: string | null;
   loading: boolean;
   error: string | null;
 }
@@ -22,6 +23,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
   const [subdomain, setSubdomain] = useState("");
   const [pipelines, setPipelines] = useState<PipelineConfig>(EMPTY_PIPELINES);
   const [fieldIds, setFieldIds] = useState<FieldConfig>(EMPTY_FIELDS);
+  const [uazapiUrl, setUazapiUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +36,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     supabase
       .from("client_configs")
-      .select("subdomain, pipelines, field_ids")
+      .select("subdomain, pipelines, field_ids, uazapi_url")
       .eq("user_id", user.id)
       .single()
       .then(({ data, error: err }) => {
@@ -44,13 +46,14 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
           setSubdomain(data.subdomain);
           setPipelines(data.pipelines as PipelineConfig);
           setFieldIds(data.field_ids as FieldConfig);
+          setUazapiUrl(data.uazapi_url ?? null);
         }
         setLoading(false);
       });
   }, [user?.id]);
 
   return (
-    <ClientConfigContext.Provider value={{ subdomain, pipelines, fieldIds, loading, error }}>
+    <ClientConfigContext.Provider value={{ subdomain, pipelines, fieldIds, uazapiUrl, loading, error }}>
       {children}
     </ClientConfigContext.Provider>
   );

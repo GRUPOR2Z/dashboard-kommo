@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { fetchUazapiChats, fetchUazapiMessages } from "../lib/uazapi";
 import type { UazapiChat, UazapiMessage } from "../lib/uazapi";
+import { useClientConfig } from "../contexts/ClientConfigContext";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -183,12 +184,12 @@ function ContactsSidebar({
 
 // ── Chat thread ───────────────────────────────────────────────────────────────
 
-function ChatThread({ chat, onBack }: { chat: UazapiChat; onBack: () => void }) {
+function ChatThread({ chat, onBack, uazapiUrl }: { chat: UazapiChat; onBack: () => void; uazapiUrl: string | null }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const name = chat.wa_contactName || chat.name || chat.phone;
 
   const { data: messages = [], isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["uazapi-messages", chat.wa_chatid],
+    queryKey: ["uazapi-messages", chat.wa_chatid, uazapiUrl],
     queryFn: () => fetchUazapiMessages(chat.wa_chatid, 60),
     staleTime: 30 * 1000,
   });
@@ -333,11 +334,13 @@ function ChatThread({ chat, onBack }: { chat: UazapiChat; onBack: () => void }) 
 
 export default function UaizapChat() {
   const [selected, setSelected] = useState<UazapiChat | null>(null);
+  const { uazapiUrl } = useClientConfig();
 
   const { data: chats = [], isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["uazapi-chats"],
+    queryKey: ["uazapi-chats", uazapiUrl],
     queryFn: () => fetchUazapiChats(100),
     staleTime: 60 * 1000,
+    enabled: !!uazapiUrl,
   });
 
   return (
@@ -353,7 +356,7 @@ export default function UaizapChat() {
 
       <div className="flex-1 overflow-hidden flex flex-col">
         {selected ? (
-          <ChatThread chat={selected} onBack={() => setSelected(null)} />
+          <ChatThread chat={selected} onBack={() => setSelected(null)} uazapiUrl={uazapiUrl} />
         ) : (
           <div
             className="flex-1 flex flex-col items-center justify-center gap-3"
@@ -365,12 +368,25 @@ export default function UaizapChat() {
             >
               <Zap size={28} style={{ color: "#f0883e" }} />
             </div>
-            <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
-              {isLoading ? "Carregando conversas..." : "Selecione uma conversa"}
-            </p>
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
-              {!isLoading && chats.length > 0 ? `${chats.filter(c => !c.wa_isGroup).length} contatos disponíveis` : ""}
-            </p>
+            {!uazapiUrl ? (
+              <>
+                <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                  Uaizap não configurado
+                </p>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  Este cliente não possui integração com Uaizap
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                  {isLoading ? "Carregando conversas..." : "Selecione uma conversa"}
+                </p>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  {!isLoading && chats.length > 0 ? `${chats.filter(c => !c.wa_isGroup).length} contatos disponíveis` : ""}
+                </p>
+              </>
+            )}
           </div>
         )}
       </div>
