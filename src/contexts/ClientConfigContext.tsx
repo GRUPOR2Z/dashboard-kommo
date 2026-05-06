@@ -9,6 +9,7 @@ interface ClientConfigValue {
   pipelines: PipelineConfig;
   fieldIds: FieldConfig;
   uazapiUrl: string | null;
+  gptmakerWorkspaceId: string | null;
   loading: boolean;
   error: string | null;
 }
@@ -24,6 +25,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
   const [pipelines, setPipelines] = useState<PipelineConfig>(EMPTY_PIPELINES);
   const [fieldIds, setFieldIds] = useState<FieldConfig>(EMPTY_FIELDS);
   const [uazapiUrl, setUazapiUrl] = useState<string | null>(null);
+  const [gptmakerWorkspaceId, setGptmakerWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +38,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     supabase
       .from("client_configs")
-      .select("subdomain, pipelines, field_ids, uazapi_url")
+      .select("subdomain, pipelines, field_ids, uazapi_url, gptmaker_workspace_id")
       .eq("user_id", user.id)
       .single()
       .then(({ data, error: err }) => {
@@ -47,13 +49,14 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
           setPipelines(data.pipelines as PipelineConfig);
           setFieldIds(data.field_ids as FieldConfig);
           setUazapiUrl(data.uazapi_url ?? null);
+          setGptmakerWorkspaceId(data.gptmaker_workspace_id ?? null);
         }
         setLoading(false);
       });
   }, [user?.id]);
 
   return (
-    <ClientConfigContext.Provider value={{ subdomain, pipelines, fieldIds, uazapiUrl, loading, error }}>
+    <ClientConfigContext.Provider value={{ subdomain, pipelines, fieldIds, uazapiUrl, gptmakerWorkspaceId, loading, error }}>
       {children}
     </ClientConfigContext.Provider>
   );

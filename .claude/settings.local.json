@@ -32,7 +32,8 @@
       "WebFetch(domain:uazapi.dev)",
       "Bash(git checkout *)",
       "Bash(git branch *)",
-      "Bash(gh repo *)"
+      "Bash(gh repo *)",
+      "WebFetch(domain:developer.gptmaker.ai)"
     ]
   }
 }

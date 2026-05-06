@@ -24,7 +24,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Dashboards",
     items: [
       { to: "/dashboard/kommo", label: "Kommo CRM" },
-      { to: "/dashboard/ia", label: "IA R2Z", badge: "Em breve" },
+      { to: "/dashboard/ia", label: "IA R2Z" },
       { to: "/dashboard/facebook", label: "Facebook Ads", badge: "Em breve" },
     ],
   },

@@ -4,6 +4,7 @@ import { ClientConfigProvider } from "./contexts/ClientConfigContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import SideNav from "./components/SideNav";
 import Dashboard from "./pages/Dashboard";
+import DashboardIA from "./pages/DashboardIA";
 import KommoChat from "./pages/KommoChat";
 import UaizapChat from "./pages/UaizapChat";
 import ConfigPage from "./pages/ConfigPage";
@@ -67,6 +68,14 @@ function AppShell() {
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/ia"
+              element={
+                <ProtectedRoute>
+                  <DashboardIA />
                 </ProtectedRoute>
               }
             />
