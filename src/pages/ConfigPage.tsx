@@ -106,6 +106,7 @@ export default function ConfigPage() {
   } as React.CSSProperties;
 
   return (
+    <div className="h-full overflow-y-auto">
     <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
       <div>
         <h1 className="text-xl font-bold" style={{ color: "var(--text)" }}>
@@ -382,6 +383,7 @@ export default function ConfigPage() {
           Resetar padrão
         </button>
       </div>
+    </div>
     </div>
   );
 }
