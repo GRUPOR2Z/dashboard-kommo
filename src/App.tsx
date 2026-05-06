@@ -60,9 +60,10 @@ function AppShell() {
         <main className="flex-1 overflow-hidden flex flex-col">
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<Navigate to="/dashboard/kommo" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/dashboard/kommo" replace />} />
             <Route
-              path="/dashboard"
+              path="/dashboard/kommo"
               element={
                 <ProtectedRoute>
                   <Dashboard />
