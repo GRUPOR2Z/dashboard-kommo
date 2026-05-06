@@ -90,15 +90,22 @@ function noteText(note: KommoNote): string {
     return `📞 Ligação${phone}${dur}`;
   }
   if (p.link) return `🔗 ${p.link}`;
-  return "(sem conteúdo)";
+  // Debug: show raw params so we can see what fields the API returns
+  const raw = Object.entries(p)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => `${k}: ${String(v)}`)
+    .join(" | ");
+  return raw ? `[debug: ${raw}]` : `[tipo: ${t}]`;
 }
 
 function hasContent(note: KommoNote): boolean {
   const t = note.note_type as string | number;
+  if (isSystemNote(t)) return false;
   if (note.params.text) return true;
   if (isCallIn(t) || isCallOut(t)) return true;
   if (note.params.link) return true;
-  return false;
+  // Show notes with any non-empty param so we can see what's coming from API
+  return Object.values(note.params).some((v) => v !== undefined && v !== null && v !== "");
 }
 
 function noteIcon(type: string | number) {
@@ -133,6 +140,8 @@ export default function ChatThread({ lead, subdomain, onBack }: Props) {
     queryFn: () => fetchLeadNotes(lead.id),
     staleTime: 60 * 1000,
   });
+
+  if (notes) console.log("[KommoChat] notas brutas:", notes);
 
   const messages: ParsedMessage[] = (notes ?? [])
     .filter((n) => hasContent(n))
