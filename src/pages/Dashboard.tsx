@@ -208,6 +208,19 @@ export default function Dashboard() {
 
   const loading = configLoading || funilLoading || clientesLoading || statusLoading;
 
+  // ── Sections available for this client's pipeline config ───────────────────
+  const availableSections = useMemo(() => {
+    const hasFup = pipelines.FUP_1 > 0 || pipelines.FUP_2 > 0 || pipelines.FUP_3 > 0;
+    const hasPlanos = pipelines.AVULSA > 0 || pipelines.TRIMESTRAL > 0 || pipelines.SEMESTRAL > 0 || pipelines.ANUAL > 0;
+    return new Set([
+      ...(hasFup ? ["followup"] : []),
+      ...(hasPlanos ? ["consultas"] : []),
+      "visao-geral",
+      "secoes",
+      "atendimento",
+    ]);
+  }, [pipelines]);
+
   // ── KPIs ───────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     if (!funilLeads || !clientesLeads || !statusEvents) return null;
@@ -1045,7 +1058,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Seções reordenáveis ────────────────────────────────────────────── */}
-      {sectionOrder.map((id) => (
+      {sectionOrder.filter((id) => availableSections.has(id)).map((id) => (
         <div
           key={id}
           onDragOver={(e) => onDragOver(e, id)}
