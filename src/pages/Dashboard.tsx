@@ -763,14 +763,16 @@ export default function Dashboard() {
             )}
           </div>
 
-          <SectionPanel
-            title="Clientes Ativos por Plano"
-            icon={<UserRound size={14} />}
-            loading={loading}
-            items={planoItems.filter((i) => i.value > 0)}
-            emptyMsg="Nenhum cliente ativo"
-            maxCols={1}
-          />
+          {availableSections.has("consultas") && (
+            <SectionPanel
+              title="Clientes Ativos por Plano"
+              icon={<UserRound size={14} />}
+              loading={loading}
+              items={planoItems.filter((i) => i.value > 0)}
+              emptyMsg="Nenhum cliente ativo"
+              maxCols={1}
+            />
+          )}
 
           {Object.keys(kpis?.byOrigem ?? {}).length > 0 && (
             <SectionPanel

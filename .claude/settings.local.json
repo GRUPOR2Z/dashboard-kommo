@@ -33,7 +33,9 @@
       "Bash(git checkout *)",
       "Bash(git branch *)",
       "Bash(gh repo *)",
-      "WebFetch(domain:developer.gptmaker.ai)"
+      "WebFetch(domain:developer.gptmaker.ai)",
+      "mcp__supabase__list_edge_functions",
+      "mcp__supabase__get_edge_function"
     ]
   }
 }
