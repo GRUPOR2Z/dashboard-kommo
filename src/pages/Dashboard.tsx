@@ -96,7 +96,7 @@ function toTimestamp(dateStr: string, endOfDay = false): number {
 export default function Dashboard() {
   const [period, setPeriod] = useState<FilterPeriod>("30d");
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(null);
-  const { subdomain, clientName, pipelines, fieldIds, loading: configLoading } = useClientConfig();
+  const { subdomain, clientName, pipelines, fieldIds, stageLabels, loading: configLoading } = useClientConfig();
 
   const todayStr = new Date().toISOString().split("T")[0];
   const thirtyAgoStr = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
@@ -359,7 +359,7 @@ export default function Dashboard() {
   }
 
   const funilItems = FUNIL_STAGES.map((s) => ({
-    label: s.label,
+    label: stageLabels[s.key] ?? s.label,
     value: kpis?.byStage[s.key] ?? 0,
     color:
       s.key === "GANHO"

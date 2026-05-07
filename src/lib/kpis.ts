@@ -138,12 +138,26 @@ export function computeKPIs(
 
   const { from: pFrom, to: pTo } = periodTimestamps(period, customDates);
   const conversoesIds = new Set<number>();
-  for (const e of statusEvents) {
-    const noperiodo = period === "todos" || (e.created_at >= pFrom && e.created_at <= pTo);
-    const entrou =
-      e.pipeline_id === pipelines.CLIENTES_ID &&
-      e.pipeline_id_before !== pipelines.CLIENTES_ID;
-    if (noperiodo && entrou) conversoesIds.add(e.lead_id);
+  if (pipelines.CLIENTES_ID !== pipelines.FUNIL_ID) {
+    // Standard: count leads that moved to a separate clients pipeline
+    for (const e of statusEvents) {
+      const noperiodo = period === "todos" || (e.created_at >= pFrom && e.created_at <= pTo);
+      const entrou =
+        e.pipeline_id === pipelines.CLIENTES_ID &&
+        e.pipeline_id_before !== pipelines.CLIENTES_ID;
+      if (noperiodo && entrou) conversoesIds.add(e.lead_id);
+    }
+  } else {
+    // Single-pipeline: count leads currently in consultation or won stages
+    const consultaStages = new Set([
+      pipelines.CONSULTA_CONFIRMADA,
+      pipelines.CONSULTA_PENDENTE,
+      pipelines.CONSULTA_NAO_CONFIRMADA,
+      pipelines.GANHO,
+    ].filter(Boolean));
+    for (const lead of funilInPeriod) {
+      if (consultaStages.has(lead.status_id)) conversoesIds.add(lead.id);
+    }
   }
   const conversoes = conversoesIds.size;
   const taxaConversao =

@@ -9,6 +9,7 @@ interface ClientConfigValue {
   clientName: string;
   pipelines: PipelineConfig;
   fieldIds: FieldConfig;
+  stageLabels: Record<string, string>;
   uazapiUrl: string | null;
   gptmakerWorkspaceId: string | null;
   loading: boolean;
@@ -26,6 +27,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
   const [clientName, setClientName] = useState("");
   const [pipelines, setPipelines] = useState<PipelineConfig>(EMPTY_PIPELINES);
   const [fieldIds, setFieldIds] = useState<FieldConfig>(EMPTY_FIELDS);
+  const [stageLabels, setStageLabels] = useState<Record<string, string>>({});
   const [uazapiUrl, setUazapiUrl] = useState<string | null>(null);
   const [gptmakerWorkspaceId, setGptmakerWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,7 +42,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     supabase
       .from("client_configs")
-      .select("subdomain, client_name, pipelines, field_ids, uazapi_url, gptmaker_workspace_id")
+      .select("subdomain, client_name, pipelines, field_ids, stage_labels, uazapi_url, gptmaker_workspace_id")
       .eq("user_id", user.id)
       .single()
       .then(({ data, error: err }) => {
@@ -51,6 +53,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
           setClientName(data.client_name ?? "");
           setPipelines(data.pipelines as PipelineConfig);
           setFieldIds(data.field_ids as FieldConfig);
+          setStageLabels((data.stage_labels as Record<string, string>) ?? {});
           setUazapiUrl(data.uazapi_url ?? null);
           setGptmakerWorkspaceId(data.gptmaker_workspace_id ?? null);
         }
@@ -59,7 +62,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
   }, [user?.id]);
 
   return (
-    <ClientConfigContext.Provider value={{ subdomain, clientName, pipelines, fieldIds, uazapiUrl, gptmakerWorkspaceId, loading, error }}>
+    <ClientConfigContext.Provider value={{ subdomain, clientName, pipelines, fieldIds, stageLabels, uazapiUrl, gptmakerWorkspaceId, loading, error }}>
       {children}
     </ClientConfigContext.Provider>
   );
