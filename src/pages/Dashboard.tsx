@@ -96,7 +96,7 @@ function toTimestamp(dateStr: string, endOfDay = false): number {
 export default function Dashboard() {
   const [period, setPeriod] = useState<FilterPeriod>("30d");
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(null);
-  const { subdomain, pipelines, fieldIds, loading: configLoading } = useClientConfig();
+  const { subdomain, clientName, pipelines, fieldIds, loading: configLoading } = useClientConfig();
 
   const todayStr = new Date().toISOString().split("T")[0];
   const thirtyAgoStr = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
@@ -944,7 +944,7 @@ export default function Dashboard() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold" style={{ color: "var(--text)" }}>
-            Josias Papa — Nutrição
+            {clientName || "Dashboard"}
           </h1>
           <p className="text-sm mt-0.5" style={{ color: "var(--muted)" }}>
             {funilLeads
@@ -1145,7 +1145,7 @@ export default function Dashboard() {
       {/* Footer */}
       <div className="text-center pt-2 pb-4">
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          Dados via Kommo API · Cache 2min · Conta: Josias Papa (nutrijosiaspapa.kommo.com)
+          Dados via Kommo API · Cache 2min · Conta: {clientName} ({subdomain}.kommo.com)
         </p>
       </div>
     </div>

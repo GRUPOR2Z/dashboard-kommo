@@ -6,6 +6,7 @@ import type { PipelineConfig, FieldConfig } from "../lib/config";
 
 interface ClientConfigValue {
   subdomain: string;
+  clientName: string;
   pipelines: PipelineConfig;
   fieldIds: FieldConfig;
   uazapiUrl: string | null;
@@ -22,6 +23,7 @@ const EMPTY_FIELDS = {} as FieldConfig;
 export function ClientConfigProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [subdomain, setSubdomain] = useState("");
+  const [clientName, setClientName] = useState("");
   const [pipelines, setPipelines] = useState<PipelineConfig>(EMPTY_PIPELINES);
   const [fieldIds, setFieldIds] = useState<FieldConfig>(EMPTY_FIELDS);
   const [uazapiUrl, setUazapiUrl] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     supabase
       .from("client_configs")
-      .select("subdomain, pipelines, field_ids, uazapi_url, gptmaker_workspace_id")
+      .select("subdomain, client_name, pipelines, field_ids, uazapi_url, gptmaker_workspace_id")
       .eq("user_id", user.id)
       .single()
       .then(({ data, error: err }) => {
@@ -46,6 +48,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
           setError("Configuração não encontrada para este usuário.");
         } else {
           setSubdomain(data.subdomain);
+          setClientName(data.client_name ?? "");
           setPipelines(data.pipelines as PipelineConfig);
           setFieldIds(data.field_ids as FieldConfig);
           setUazapiUrl(data.uazapi_url ?? null);
@@ -56,7 +59,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
   }, [user?.id]);
 
   return (
-    <ClientConfigContext.Provider value={{ subdomain, pipelines, fieldIds, uazapiUrl, gptmakerWorkspaceId, loading, error }}>
+    <ClientConfigContext.Provider value={{ subdomain, clientName, pipelines, fieldIds, uazapiUrl, gptmakerWorkspaceId, loading, error }}>
       {children}
     </ClientConfigContext.Provider>
   );
