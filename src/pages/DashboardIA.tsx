@@ -1,27 +1,55 @@
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bot, Users, PhoneForwarded, CheckCircle, Clock, Zap, Loader2 } from "lucide-react";
+import {
+  Bot, Users, PhoneForwarded, CheckCircle, Clock,
+  Zap, Loader2, RefreshCw, CalendarRange,
+} from "lucide-react";
 import { fetchAllInteractions } from "../lib/gptmaker";
 import { useClientConfig } from "../contexts/ClientConfigContext";
 import type { GptInteraction } from "../lib/gptmaker";
+import type { FilterPeriod } from "../lib/types";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Filter helpers ─────────────────────────────────────────────────────────────
 
-const FOLLOWUP_KEYWORDS = [
-  "retorno", "retornar", "ligar depois", "ligaremos", "follow",
-  "follow-up", "acompanhamento", "vou verificar", "vou checar",
+const FILTER_OPTIONS: { label: string; value: FilterPeriod }[] = [
+  { label: "Hoje", value: "hoje" },
+  { label: "Ontem", value: "ontem" },
+  { label: "7 dias", value: "7d" },
+  { label: "30 dias", value: "30d" },
+  { label: "Todos", value: "todos" },
+  { label: "Período", value: "custom" },
 ];
 
-const ERROR_KEYWORDS = [
-  "não entendi", "nao entendi", "não compreendi", "não consegui",
-  "erro", "problema", "desculpe", "tente novamente",
-];
-
-function detectKeywords(interactions: GptInteraction[], keywords: string[]): number {
-  return interactions.filter((i) =>
-    keywords.some((kw) => i.contactName?.toLowerCase().includes(kw))
-  ).length;
+function toMs(dateStr: string, endOfDay = false): number {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const d = new Date(year, month - 1, day);
+  if (endOfDay) d.setHours(23, 59, 59, 999);
+  else d.setHours(0, 0, 0, 0);
+  return d.getTime();
 }
+
+function interactionInPeriod(
+  startAt: number,
+  period: FilterPeriod,
+  todayStart: number,
+  now: number,
+  customMs?: { from: number; to: number }
+): boolean {
+  if (period === "todos") return true;
+  if (period === "custom" && customMs) {
+    return startAt >= customMs.from && startAt <= customMs.to;
+  }
+  const DAY = 86400000;
+  switch (period) {
+    case "hoje":   return startAt >= todayStart && startAt <= now;
+    case "ontem":  return startAt >= todayStart - DAY && startAt < todayStart;
+    case "7d":     return startAt >= todayStart - 7 * DAY && startAt <= now;
+    case "30d":    return startAt >= todayStart - 30 * DAY && startAt <= now;
+    default:       return true;
+  }
+}
+
+// ── Metrics helpers ────────────────────────────────────────────────────────────
 
 function avgDurationMinutes(interactions: GptInteraction[]): string {
   const resolved = interactions.filter((i) => i.resolvedAt && i.startAt);
@@ -65,7 +93,7 @@ function MetricCard({
   );
 }
 
-// ── Status badge ──────────────────────────────────────────────────────────────
+// ── Status bar ────────────────────────────────────────────────────────────────
 
 function StatusBar({ running, waiting, resolved, total }: {
   running: number; waiting: number; resolved: number; total: number;
@@ -102,25 +130,43 @@ function StatusBar({ running, waiting, resolved, total }: {
 export default function DashboardIA() {
   const { gptmakerWorkspaceId, loading: configLoading } = useClientConfig();
 
-  const { data: interactions = [], isLoading, error } = useQuery({
+  const [period, setPeriod] = useState<FilterPeriod>("30d");
+  const todayStr = new Date().toISOString().split("T")[0];
+  const thirtyAgoStr = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+  const [customFromStr, setCustomFromStr] = useState(thirtyAgoStr);
+  const [customToStr, setCustomToStr] = useState(todayStr);
+
+  const customMs =
+    period === "custom" && customFromStr && customToStr
+      ? { from: toMs(customFromStr, false), to: toMs(customToStr, true) }
+      : undefined;
+
+  const { data: interactions = [], isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["gptmaker-interactions", gptmakerWorkspaceId],
     queryFn: () => fetchAllInteractions(gptmakerWorkspaceId!),
     enabled: !!gptmakerWorkspaceId && !configLoading,
     staleTime: 5 * 60 * 1000,
   });
 
+  const filteredInteractions = useMemo(() => {
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const now = Date.now();
+    return interactions.filter((i) =>
+      interactionInPeriod(i.startAt, period, todayStart, now, customMs)
+    );
+  }, [interactions, period, customMs]);
+
   const metrics = useMemo(() => {
-    const total = interactions.length;
-    const running = interactions.filter((i) => i.status === "RUNNING").length;
-    const waiting = interactions.filter((i) => i.status === "WAITING").length;
-    const resolved = interactions.filter((i) => i.status === "RESOLVED").length;
-    const transferred = interactions.filter((i) => i.transferAt !== null).length;
+    const total = filteredInteractions.length;
+    const running = filteredInteractions.filter((i) => i.status === "RUNNING").length;
+    const waiting = filteredInteractions.filter((i) => i.status === "WAITING").length;
+    const resolved = filteredInteractions.filter((i) => i.status === "RESOLVED").length;
+    const transferred = filteredInteractions.filter((i) => i.transferAt !== null).length;
     const transferRate = total ? Math.round((transferred / total) * 100) : 0;
     const resolveRate = total ? Math.round((resolved / total) * 100) : 0;
-    const avgDuration = avgDurationMinutes(interactions);
-
+    const avgDuration = avgDurationMinutes(filteredInteractions);
     return { total, running, waiting, resolved, transferred, transferRate, resolveRate, avgDuration };
-  }, [interactions]);
+  }, [filteredInteractions]);
 
   if (!gptmakerWorkspaceId && !configLoading) {
     return (
@@ -135,16 +181,92 @@ export default function DashboardIA() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-4xl mx-auto px-6 py-6 space-y-6">
+
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "var(--green-dim)" }}>
-            <Bot size={18} style={{ color: "var(--green)" }} />
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "var(--green-dim)" }}>
+              <Bot size={18} style={{ color: "var(--green)" }} />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold" style={{ color: "var(--text)" }}>Dashboard IA</h1>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>Métricas da IA — Agente IA</p>
+            </div>
+            {isLoading && <Loader2 size={16} className="animate-spin" style={{ color: "var(--muted)" }} />}
           </div>
-          <div>
-            <h1 className="text-lg font-bold" style={{ color: "var(--text)" }}>Dashboard IA</h1>
-            <p className="text-xs" style={{ color: "var(--muted)" }}>Métricas da IA — Agente IA</p>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Period filter */}
+            <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: "var(--border)" }}>
+              {FILTER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setPeriod(opt.value)}
+                  className="px-3 py-1.5 text-xs font-medium transition-colors"
+                  style={{
+                    background: period === opt.value ? "var(--green)" : "var(--card)",
+                    color: period === opt.value ? "#000" : "var(--muted)",
+                  }}
+                >
+                  {opt.value === "custom" ? (
+                    <span className="flex items-center gap-1">
+                      <CalendarRange size={11} />
+                      Período
+                    </span>
+                  ) : (
+                    opt.label
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom date range */}
+            {period === "custom" && (
+              <div
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border"
+                style={{ background: "var(--card)", borderColor: "var(--green)" }}
+              >
+                <CalendarRange size={11} style={{ color: "var(--green)" }} />
+                <label className="flex items-center gap-1">
+                  <span className="text-xs" style={{ color: "var(--muted)" }}>De</span>
+                  <input
+                    type="date"
+                    value={customFromStr}
+                    onChange={(e) => setCustomFromStr(e.target.value)}
+                    className="bg-transparent text-xs outline-none"
+                    style={{ color: "var(--text)", colorScheme: "dark" }}
+                  />
+                </label>
+                <span className="text-xs" style={{ color: "var(--muted)" }}>—</span>
+                <label className="flex items-center gap-1">
+                  <span className="text-xs" style={{ color: "var(--muted)" }}>Até</span>
+                  <input
+                    type="date"
+                    value={customToStr}
+                    onChange={(e) => setCustomToStr(e.target.value)}
+                    className="bg-transparent text-xs outline-none"
+                    style={{ color: "var(--text)", colorScheme: "dark" }}
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* Refresh */}
+            <button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
+              style={{
+                background: "var(--card)",
+                borderColor: "var(--border)",
+                color: "var(--muted)",
+                opacity: isFetching ? 0.6 : 1,
+              }}
+            >
+              <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} />
+              Atualizar
+            </button>
           </div>
-          {isLoading && <Loader2 size={16} className="animate-spin ml-auto" style={{ color: "var(--muted)" }} />}
         </div>
 
         {error && (
@@ -185,7 +307,7 @@ export default function DashboardIA() {
             </span>
           </div>
           <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {interactions
+            {filteredInteractions
               .filter((i) => i.status !== "RESOLVED")
               .slice(0, 10)
               .map((i) => (
@@ -218,6 +340,7 @@ export default function DashboardIA() {
             )}
           </div>
         </div>
+
       </div>
     </div>
   );
