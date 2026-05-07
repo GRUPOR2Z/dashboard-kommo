@@ -164,7 +164,7 @@ export function computeKPIs(
     totalLeads > 0 ? Math.round((conversoes / totalLeads) * 100 * 10) / 10 : 0;
 
   const byStage: Record<string, number> = {};
-  for (const lead of funilLeads) {
+  for (const lead of funilInPeriod) {
     const key = statusMap[lead.status_id] ?? `status_${lead.status_id}`;
     byStage[key] = (byStage[key] ?? 0) + 1;
   }
