@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Bot, Users, PhoneForwarded, CheckCircle, Clock,
+  Bot, Users, PhoneForwarded, CheckCircle,
   Zap, Loader2, RefreshCw, CalendarRange, ShieldCheck, AlarmClock,
 } from "lucide-react";
 import { fetchAllInteractions } from "../lib/gptmaker";
@@ -305,8 +305,6 @@ export default function DashboardIA() {
             sub={`${metrics.transferRate}% do total`}                                                    color="#f0883e" />
           <MetricCard icon={CheckCircle}   label="Resolvidos"             value={metrics.resolved}
             sub={`${metrics.resolveRate}% do total`}                                                     color="#3fb950" />
-          <MetricCard icon={Clock}         label="Tempo médio"            value={metrics.avgDuration}
-            sub="atendimentos resolvidos"                                                                 color="#a371f7" />
           <MetricCard icon={ShieldCheck}   label="Eficiência da IA"       value={`${metrics.efficiencyRate}%`}
             sub="resolvidos sem humano"                                                                   color="#3fb950" />
         </div>

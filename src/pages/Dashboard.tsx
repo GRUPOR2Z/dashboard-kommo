@@ -668,14 +668,6 @@ export default function Dashboard() {
             active={activeDrawer === "convertidos"}
           />
           <KPICard
-            title="Clientes Ativos"
-            value={kpis?.totalClientesAtivos ?? 0}
-            subtitle="Total em acompanhamento"
-            icon={<Activity size={14} />}
-            color="#f0883e"
-            loading={loading}
-          />
-          <KPICard
             title="Taxa de Conversão"
             value={kpis ? `${kpis.taxaConversao}%` : "—"}
             subtitle="Lead → consulta concluída"
