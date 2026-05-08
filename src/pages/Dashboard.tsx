@@ -20,6 +20,7 @@ import {
   GripVertical,
   MessageSquare,
   CheckCheck,
+  Stethoscope,
 } from "lucide-react";
 import type { FilterPeriod } from "../lib/types";
 import {
@@ -762,6 +763,50 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+
+          {(stageLabels["CONSULTA_PENDENTE"] || stageLabels["CONSULTA_NAO_CONFIRMADA"]) && (
+            <div className="rounded-xl border p-5 flex flex-col gap-4"
+              style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+              <div className="flex items-center gap-2">
+                <Stethoscope size={14} style={{ color: "#a371f7" }} />
+                <h3 className="font-semibold text-sm" style={{ color: "var(--text)" }}>Consultas por Médico</h3>
+              </div>
+              {(() => {
+                const amandaCount  = kpis?.byStage["CONSULTA_PENDENTE"]       ?? 0;
+                const gabrielCount = kpis?.byStage["CONSULTA_NAO_CONFIRMADA"] ?? 0;
+                const total        = amandaCount + gabrielCount;
+                const amandaLabel  = stageLabels["CONSULTA_PENDENTE"]       ?? "Consulta Pendente";
+                const gabrielLabel = stageLabels["CONSULTA_NAO_CONFIRMADA"] ?? "Não Confirmada";
+                return (
+                  <div className="space-y-3">
+                    {[
+                      { label: amandaLabel,  count: amandaCount,  color: "#a371f7" },
+                      { label: gabrielLabel, count: gabrielCount, color: "#58a6ff" },
+                    ].map(({ label, count, color }) => {
+                      const pct = total ? Math.round((count / total) * 100) : 0;
+                      return (
+                        <div key={label}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-xs font-medium" style={{ color: "var(--text)" }}>{label}</span>
+                            <span className="text-xs font-bold" style={{ color }}>
+                              {count} <span style={{ color: "var(--muted)", fontWeight: 400 }}>({pct}%)</span>
+                            </span>
+                          </div>
+                          <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+                            <div className="h-full rounded-full transition-all duration-500"
+                              style={{ width: `${pct}%`, background: color }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <p className="text-xs pt-1" style={{ color: "var(--muted)" }}>
+                      {total} consultas no total
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {availableSections.has("consultas") && (
             <SectionPanel

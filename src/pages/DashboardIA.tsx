@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bot, Users, PhoneForwarded, CheckCircle, Clock,
-  Zap, Loader2, RefreshCw, CalendarRange,
+  Zap, Loader2, RefreshCw, CalendarRange, ShieldCheck, AlarmClock,
 } from "lucide-react";
 import { fetchAllInteractions } from "../lib/gptmaker";
 import { useClientConfig } from "../contexts/ClientConfigContext";
@@ -36,16 +36,14 @@ function interactionInPeriod(
   customMs?: { from: number; to: number }
 ): boolean {
   if (period === "todos") return true;
-  if (period === "custom" && customMs) {
-    return startAt >= customMs.from && startAt <= customMs.to;
-  }
+  if (period === "custom" && customMs) return startAt >= customMs.from && startAt <= customMs.to;
   const DAY = 86400000;
   switch (period) {
-    case "hoje":   return startAt >= todayStart && startAt <= now;
-    case "ontem":  return startAt >= todayStart - DAY && startAt < todayStart;
-    case "7d":     return startAt >= todayStart - 7 * DAY && startAt <= now;
-    case "30d":    return startAt >= todayStart - 30 * DAY && startAt <= now;
-    default:       return true;
+    case "hoje":  return startAt >= todayStart && startAt <= now;
+    case "ontem": return startAt >= todayStart - DAY && startAt < todayStart;
+    case "7d":    return startAt >= todayStart - 7 * DAY && startAt <= now;
+    case "30d":   return startAt >= todayStart - 30 * DAY && startAt <= now;
+    default:      return true;
   }
 }
 
@@ -60,28 +58,52 @@ function avgDurationMinutes(interactions: GptInteraction[]): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}min`;
 }
 
+// ── Follow-up buckets ─────────────────────────────────────────────────────────
+
+const FUP_BUCKETS = [
+  { key: "fresh", label: "Aguardando",    sub: "< 30 min",   color: "#58a6ff" },
+  { key: "fup1",  label: "Follow-up 1",  sub: "30 min – 2h", color: "#a371f7" },
+  { key: "fup2",  label: "Follow-up 2",  sub: "2h – 1 dia",  color: "#f0883e" },
+  { key: "fup3",  label: "Follow-up 3",  sub: "1 – 3 dias",  color: "#d29922" },
+  { key: "fup4",  label: "Follow-up 4",  sub: "3 – 7 dias",  color: "#f85149" },
+  { key: "final", label: "Encerramento", sub: "> 7 dias",     color: "#6e7681" },
+] as const;
+
+type BucketKey = typeof FUP_BUCKETS[number]["key"];
+
+function computeFollowUpBuckets(waiting: GptInteraction[]) {
+  const now = Date.now();
+  const MIN30 = 30 * 60 * 1000;
+  const H2   = 2  * 60 * 60 * 1000;
+  const D1   = 24 * 60 * 60 * 1000;
+  const D3   = 3  * 24 * 60 * 60 * 1000;
+  const D7   = 7  * 24 * 60 * 60 * 1000;
+
+  const counts: Record<BucketKey, number> = { fresh: 0, fup1: 0, fup2: 0, fup3: 0, fup4: 0, final: 0 };
+  for (const i of waiting) {
+    const elapsed = now - i.startAt;
+    if      (elapsed < MIN30) counts.fresh++;
+    else if (elapsed < H2)    counts.fup1++;
+    else if (elapsed < D1)    counts.fup2++;
+    else if (elapsed < D3)    counts.fup3++;
+    else if (elapsed < D7)    counts.fup4++;
+    else                      counts.final++;
+  }
+  return counts;
+}
+
 // ── Metric card ───────────────────────────────────────────────────────────────
 
-function MetricCard({
-  icon: Icon, label, value, sub, color,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string | number;
-  sub?: string;
-  color: string;
+function MetricCard({ icon: Icon, label, value, sub, color }: {
+  icon: React.ElementType; label: string; value: string | number; sub?: string; color: string;
 }) {
   return (
-    <div
-      className="rounded-xl p-4 flex flex-col gap-3"
-      style={{ background: "var(--card)", border: "1px solid var(--border)" }}
-    >
+    <div className="rounded-xl p-4 flex flex-col gap-3"
+      style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium" style={{ color: "var(--muted)" }}>{label}</span>
-        <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center"
-          style={{ background: color + "22" }}
-        >
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+          style={{ background: color + "22" }}>
           <Icon size={14} style={{ color }} />
         </div>
       </div>
@@ -157,15 +179,23 @@ export default function DashboardIA() {
   }, [interactions, period, customMs]);
 
   const metrics = useMemo(() => {
-    const total = filteredInteractions.length;
-    const running = filteredInteractions.filter((i) => i.status === "RUNNING").length;
-    const waiting = filteredInteractions.filter((i) => i.status === "WAITING").length;
-    const resolved = filteredInteractions.filter((i) => i.status === "RESOLVED").length;
+    const total       = filteredInteractions.length;
+    const running     = filteredInteractions.filter((i) => i.status === "RUNNING").length;
+    const waiting     = filteredInteractions.filter((i) => i.status === "WAITING").length;
+    const resolved    = filteredInteractions.filter((i) => i.status === "RESOLVED").length;
     const transferred = filteredInteractions.filter((i) => i.transferAt !== null).length;
-    const transferRate = total ? Math.round((transferred / total) * 100) : 0;
-    const resolveRate = total ? Math.round((resolved / total) * 100) : 0;
-    const avgDuration = avgDurationMinutes(filteredInteractions);
-    return { total, running, waiting, resolved, transferred, transferRate, resolveRate, avgDuration };
+    const autonomous  = filteredInteractions.filter((i) => i.status === "RESOLVED" && !i.transferAt).length;
+    const transferRate   = total   ? Math.round((transferred / total)   * 100) : 0;
+    const resolveRate    = total   ? Math.round((resolved   / total)   * 100) : 0;
+    const efficiencyRate = resolved ? Math.round((autonomous / resolved) * 100) : 0;
+    const avgDuration    = avgDurationMinutes(filteredInteractions);
+    return { total, running, waiting, resolved, transferred, autonomous,
+             transferRate, resolveRate, efficiencyRate, avgDuration };
+  }, [filteredInteractions]);
+
+  const followUpBuckets = useMemo(() => {
+    const waiting = filteredInteractions.filter((i) => i.status === "WAITING");
+    return { counts: computeFollowUpBuckets(waiting), total: waiting.length };
   }, [filteredInteractions]);
 
   if (!gptmakerWorkspaceId && !configLoading) {
@@ -196,73 +226,44 @@ export default function DashboardIA() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* Period filter */}
             <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: "var(--border)" }}>
               {FILTER_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setPeriod(opt.value)}
+                <button key={opt.value} onClick={() => setPeriod(opt.value)}
                   className="px-3 py-1.5 text-xs font-medium transition-colors"
                   style={{
                     background: period === opt.value ? "var(--green)" : "var(--card)",
                     color: period === opt.value ? "#000" : "var(--muted)",
-                  }}
-                >
-                  {opt.value === "custom" ? (
-                    <span className="flex items-center gap-1">
-                      <CalendarRange size={11} />
-                      Período
-                    </span>
-                  ) : (
-                    opt.label
-                  )}
+                  }}>
+                  {opt.value === "custom"
+                    ? <span className="flex items-center gap-1"><CalendarRange size={11} />Período</span>
+                    : opt.label}
                 </button>
               ))}
             </div>
 
-            {/* Custom date range */}
             {period === "custom" && (
-              <div
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border"
-                style={{ background: "var(--card)", borderColor: "var(--green)" }}
-              >
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border"
+                style={{ background: "var(--card)", borderColor: "var(--green)" }}>
                 <CalendarRange size={11} style={{ color: "var(--green)" }} />
                 <label className="flex items-center gap-1">
                   <span className="text-xs" style={{ color: "var(--muted)" }}>De</span>
-                  <input
-                    type="date"
-                    value={customFromStr}
-                    onChange={(e) => setCustomFromStr(e.target.value)}
+                  <input type="date" value={customFromStr} onChange={(e) => setCustomFromStr(e.target.value)}
                     className="bg-transparent text-xs outline-none"
-                    style={{ color: "var(--text)", colorScheme: "dark" }}
-                  />
+                    style={{ color: "var(--text)", colorScheme: "dark" }} />
                 </label>
                 <span className="text-xs" style={{ color: "var(--muted)" }}>—</span>
                 <label className="flex items-center gap-1">
                   <span className="text-xs" style={{ color: "var(--muted)" }}>Até</span>
-                  <input
-                    type="date"
-                    value={customToStr}
-                    onChange={(e) => setCustomToStr(e.target.value)}
+                  <input type="date" value={customToStr} onChange={(e) => setCustomToStr(e.target.value)}
                     className="bg-transparent text-xs outline-none"
-                    style={{ color: "var(--text)", colorScheme: "dark" }}
-                  />
+                    style={{ color: "var(--text)", colorScheme: "dark" }} />
                 </label>
               </div>
             )}
 
-            {/* Refresh */}
-            <button
-              onClick={() => refetch()}
-              disabled={isFetching}
+            <button onClick={() => refetch()} disabled={isFetching}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
-              style={{
-                background: "var(--card)",
-                borderColor: "var(--border)",
-                color: "var(--muted)",
-                opacity: isFetching ? 0.6 : 1,
-              }}
-            >
+              style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--muted)", opacity: isFetching ? 0.6 : 1 }}>
               <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} />
               Atualizar
             </button>
@@ -276,31 +277,72 @@ export default function DashboardIA() {
         )}
 
         {/* Main metrics */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <MetricCard icon={Users} label="Total de atendimentos" value={metrics.total} color="#58a6ff" />
-          <MetricCard icon={PhoneForwarded} label="Transferências" value={metrics.transferred}
-            sub={`${metrics.transferRate}% do total`} color="#f0883e" />
-          <MetricCard icon={CheckCircle} label="Resolvidos" value={metrics.resolved}
-            sub={`${metrics.resolveRate}% do total`} color="#3fb950" />
-          <MetricCard icon={Clock} label="Tempo médio" value={metrics.avgDuration}
-            sub="atendimentos resolvidos" color="#a371f7" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+          <MetricCard icon={Users}         label="Total de atendimentos" value={metrics.total}           color="#58a6ff" />
+          <MetricCard icon={PhoneForwarded} label="Transferências"        value={metrics.transferred}
+            sub={`${metrics.transferRate}% do total`}                                                    color="#f0883e" />
+          <MetricCard icon={CheckCircle}   label="Resolvidos"             value={metrics.resolved}
+            sub={`${metrics.resolveRate}% do total`}                                                     color="#3fb950" />
+          <MetricCard icon={Clock}         label="Tempo médio"            value={metrics.avgDuration}
+            sub="atendimentos resolvidos"                                                                 color="#a371f7" />
+          <MetricCard icon={ShieldCheck}   label="Eficiência da IA"       value={`${metrics.efficiencyRate}%`}
+            sub="resolvidos sem humano"                                                                   color="#3fb950" />
         </div>
 
         {/* Status bar */}
-        <StatusBar
-          running={metrics.running}
-          waiting={metrics.waiting}
-          resolved={metrics.resolved}
-          total={metrics.total}
-        />
+        <StatusBar running={metrics.running} waiting={metrics.waiting} resolved={metrics.resolved} total={metrics.total} />
+
+        {/* Follow-ups da IA */}
+        {followUpBuckets.total > 0 && (
+          <div className="rounded-xl" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+            <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "var(--border)" }}>
+              <AlarmClock size={14} style={{ color: "#f0883e" }} />
+              <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>Follow-ups da IA</span>
+              <span className="text-xs ml-1" style={{ color: "var(--muted)" }}>— leads aguardando resposta</span>
+              <span className="ml-auto text-xs px-2 py-0.5 rounded-full"
+                style={{ background: "#f0883e22", color: "#f0883e" }}>
+                {followUpBuckets.total} aguardando
+              </span>
+            </div>
+            <div className="p-4 space-y-3">
+              {FUP_BUCKETS.map((bucket) => {
+                const count = followUpBuckets.counts[bucket.key];
+                const pct = followUpBuckets.total ? Math.round((count / followUpBuckets.total) * 100) : 0;
+                return (
+                  <div key={bucket.key} className="flex items-center gap-3">
+                    <div className="w-28 shrink-0">
+                      <p className="text-xs font-medium" style={{ color: "var(--text)" }}>{bucket.label}</p>
+                      <p className="text-xs" style={{ color: "var(--muted)" }}>{bucket.sub}</p>
+                    </div>
+                    <div className="flex-1 h-4 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${Math.max(count > 0 ? pct : 0, count > 0 ? 1 : 0)}%`, background: bucket.color }}
+                      />
+                    </div>
+                    <span className="text-xs font-bold w-8 text-right shrink-0" style={{ color: bucket.color }}>
+                      {count}
+                    </span>
+                    <span className="text-xs w-8 shrink-0" style={{ color: "var(--muted)" }}>
+                      {pct}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="px-4 py-2 border-t" style={{ borderColor: "var(--border)" }}>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Estimativa baseada no tempo desde o início da interação. As ações de inatividade disparam em 30min, 2h, 1 dia, 3 dias e 7 dias.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Active conversations */}
         <div className="rounded-xl" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
           <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "var(--border)" }}>
             <Zap size={14} style={{ color: "var(--green)" }} />
-            <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-              Atendimentos ativos
-            </span>
+            <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>Atendimentos ativos</span>
             <span className="ml-auto text-xs px-2 py-0.5 rounded-full"
               style={{ background: "var(--green-dim)", color: "var(--green)" }}>
               {metrics.running + metrics.waiting}
@@ -318,17 +360,13 @@ export default function DashboardIA() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate" style={{ color: "var(--text)" }}>{i.contactName}</p>
-                    <p className="text-xs" style={{ color: "var(--muted)" }}>
-                      {i.agentName} · #{i.protocol}
-                    </p>
+                    <p className="text-xs" style={{ color: "var(--muted)" }}>{i.agentName} · #{i.protocol}</p>
                   </div>
-                  <span
-                    className="text-xs px-2 py-0.5 rounded-full flex-shrink-0"
+                  <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0"
                     style={{
                       background: i.status === "RUNNING" ? "#58a6ff22" : "#f0883e22",
-                      color: i.status === "RUNNING" ? "#58a6ff" : "#f0883e",
-                    }}
-                  >
+                      color:      i.status === "RUNNING" ? "#58a6ff"   : "#f0883e",
+                    }}>
                     {i.status === "RUNNING" ? "Em andamento" : "Aguardando"}
                   </span>
                 </div>
