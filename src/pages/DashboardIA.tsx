@@ -58,10 +58,10 @@ function avgDurationMinutes(interactions: GptInteraction[]): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}min`;
 }
 
-// ── Follow-up buckets ─────────────────────────────────────────────────────────
+// ── Follow-up / reactivation buckets ──────────────────────────────────────────
 
 const FUP_BUCKETS = [
-  { key: "fresh", label: "Aguardando",    sub: "< 30 min",   color: "#58a6ff" },
+  { key: "fresh", label: "Sem follow-up", sub: "< 30 min",   color: "#58a6ff" },
   { key: "fup1",  label: "Follow-up 1",  sub: "30 min – 2h", color: "#a371f7" },
   { key: "fup2",  label: "Follow-up 2",  sub: "2h – 1 dia",  color: "#f0883e" },
   { key: "fup3",  label: "Follow-up 3",  sub: "1 – 3 dias",  color: "#d29922" },
@@ -71,23 +71,37 @@ const FUP_BUCKETS = [
 
 type BucketKey = typeof FUP_BUCKETS[number]["key"];
 
+const MIN30 = 30 * 60 * 1000;
+const H2    = 2  * 60 * 60 * 1000;
+const D1    = 24 * 60 * 60 * 1000;
+const D3    = 3  * 24 * 60 * 60 * 1000;
+const D7    = 7  * 24 * 60 * 60 * 1000;
+
+function bucketByElapsed(elapsed: number): BucketKey {
+  if      (elapsed < MIN30) return "fresh";
+  else if (elapsed < H2)    return "fup1";
+  else if (elapsed < D1)    return "fup2";
+  else if (elapsed < D3)    return "fup3";
+  else if (elapsed < D7)    return "fup4";
+  else                      return "final";
+}
+
+function emptyBuckets(): Record<BucketKey, number> {
+  return { fresh: 0, fup1: 0, fup2: 0, fup3: 0, fup4: 0, final: 0 };
+}
+
 function computeFollowUpBuckets(waiting: GptInteraction[]) {
   const now = Date.now();
-  const MIN30 = 30 * 60 * 1000;
-  const H2   = 2  * 60 * 60 * 1000;
-  const D1   = 24 * 60 * 60 * 1000;
-  const D3   = 3  * 24 * 60 * 60 * 1000;
-  const D7   = 7  * 24 * 60 * 60 * 1000;
+  const counts = emptyBuckets();
+  for (const i of waiting) counts[bucketByElapsed(now - i.startAt)]++;
+  return counts;
+}
 
-  const counts: Record<BucketKey, number> = { fresh: 0, fup1: 0, fup2: 0, fup3: 0, fup4: 0, final: 0 };
-  for (const i of waiting) {
-    const elapsed = now - i.startAt;
-    if      (elapsed < MIN30) counts.fresh++;
-    else if (elapsed < H2)    counts.fup1++;
-    else if (elapsed < D1)    counts.fup2++;
-    else if (elapsed < D3)    counts.fup3++;
-    else if (elapsed < D7)    counts.fup4++;
-    else                      counts.final++;
+function computeReactivationBuckets(resolved: GptInteraction[]) {
+  const counts = emptyBuckets();
+  for (const i of resolved) {
+    if (!i.resolvedAt) continue;
+    counts[bucketByElapsed(i.resolvedAt - i.startAt)]++;
   }
   return counts;
 }
@@ -194,8 +208,16 @@ export default function DashboardIA() {
   }, [filteredInteractions]);
 
   const followUpBuckets = useMemo(() => {
-    const waiting = filteredInteractions.filter((i) => i.status === "WAITING");
-    return { counts: computeFollowUpBuckets(waiting), total: waiting.length };
+    const waiting  = filteredInteractions.filter((i) => i.status === "WAITING");
+    const resolved = filteredInteractions.filter((i) => i.status === "RESOLVED" && !!i.resolvedAt);
+    const reactivated = resolved.filter((i) => (i.resolvedAt! - i.startAt) > MIN30).length;
+    const reactivationRate = resolved.length ? Math.round((reactivated / resolved.length) * 100) : 0;
+    return {
+      waiting:      { counts: computeFollowUpBuckets(waiting),            total: waiting.length },
+      reactivation: { counts: computeReactivationBuckets(resolved),       total: resolved.length },
+      reactivated,
+      reactivationRate,
+    };
   }, [filteredInteractions]);
 
   if (!gptmakerWorkspaceId && !configLoading) {
@@ -293,46 +315,90 @@ export default function DashboardIA() {
         <StatusBar running={metrics.running} waiting={metrics.waiting} resolved={metrics.resolved} total={metrics.total} />
 
         {/* Follow-ups da IA */}
-        {followUpBuckets.total > 0 && (
+        {(followUpBuckets.waiting.total > 0 || followUpBuckets.reactivation.total > 0) && (
           <div className="rounded-xl" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
             <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "var(--border)" }}>
               <AlarmClock size={14} style={{ color: "#f0883e" }} />
               <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>Follow-ups da IA</span>
-              <span className="text-xs ml-1" style={{ color: "var(--muted)" }}>— leads aguardando resposta</span>
-              <span className="ml-auto text-xs px-2 py-0.5 rounded-full"
-                style={{ background: "#f0883e22", color: "#f0883e" }}>
-                {followUpBuckets.total} aguardando
+              <span className="ml-auto flex items-center gap-3">
+                <span className="text-xs px-2 py-0.5 rounded-full"
+                  style={{ background: "#f0883e22", color: "#f0883e" }}>
+                  {followUpBuckets.waiting.total} aguardando
+                </span>
+                {followUpBuckets.reactivation.total > 0 && (
+                  <span className="text-xs px-2 py-0.5 rounded-full"
+                    style={{ background: "#3fb95022", color: "#3fb950" }}>
+                    {followUpBuckets.reactivationRate}% reativação
+                  </span>
+                )}
               </span>
             </div>
-            <div className="p-4 space-y-3">
-              {FUP_BUCKETS.map((bucket) => {
-                const count = followUpBuckets.counts[bucket.key];
-                const pct = followUpBuckets.total ? Math.round((count / followUpBuckets.total) * 100) : 0;
-                return (
-                  <div key={bucket.key} className="flex items-center gap-3">
-                    <div className="w-28 shrink-0">
-                      <p className="text-xs font-medium" style={{ color: "var(--text)" }}>{bucket.label}</p>
-                      <p className="text-xs" style={{ color: "var(--muted)" }}>{bucket.sub}</p>
+
+            {/* Em espera */}
+            {followUpBuckets.waiting.total > 0 && (
+              <div className="p-4 space-y-3">
+                <p className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>
+                  Aguardando resposta — {followUpBuckets.waiting.total} leads
+                </p>
+                {FUP_BUCKETS.map((bucket) => {
+                  const count = followUpBuckets.waiting.counts[bucket.key];
+                  const pct   = followUpBuckets.waiting.total
+                    ? Math.round((count / followUpBuckets.waiting.total) * 100) : 0;
+                  return (
+                    <div key={bucket.key} className="flex items-center gap-3">
+                      <div className="w-28 shrink-0">
+                        <p className="text-xs font-medium" style={{ color: "var(--text)" }}>{bucket.label}</p>
+                        <p className="text-xs" style={{ color: "var(--muted)" }}>{bucket.sub}</p>
+                      </div>
+                      <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+                        <div className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${count > 0 ? Math.max(pct, 1) : 0}%`, background: bucket.color }} />
+                      </div>
+                      <span className="text-xs font-bold w-8 text-right shrink-0" style={{ color: bucket.color }}>{count}</span>
+                      <span className="text-xs w-8 shrink-0" style={{ color: "var(--muted)" }}>{pct}%</span>
                     </div>
-                    <div className="flex-1 h-4 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${Math.max(count > 0 ? pct : 0, count > 0 ? 1 : 0)}%`, background: bucket.color }}
-                      />
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Reativados */}
+            {followUpBuckets.reactivation.total > 0 && (
+              <div className="p-4 space-y-3 border-t" style={{ borderColor: "var(--border)" }}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+                    Reativados (responderam após follow-up) — {followUpBuckets.reactivated} de {followUpBuckets.reactivation.total}
+                  </p>
+                  <span className="text-xs font-bold" style={{ color: "#3fb950" }}>
+                    {followUpBuckets.reactivationRate}%
+                  </span>
+                </div>
+                {FUP_BUCKETS.filter((b) => b.key !== "fresh").map((bucket) => {
+                  const count = followUpBuckets.reactivation.counts[bucket.key];
+                  const pct   = followUpBuckets.reactivated > 0
+                    ? Math.round((count / followUpBuckets.reactivated) * 100) : 0;
+                  if (!count) return null;
+                  return (
+                    <div key={bucket.key} className="flex items-center gap-3">
+                      <div className="w-28 shrink-0">
+                        <p className="text-xs font-medium" style={{ color: "var(--text)" }}>{bucket.label}</p>
+                        <p className="text-xs" style={{ color: "var(--muted)" }}>{bucket.sub}</p>
+                      </div>
+                      <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+                        <div className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${count > 0 ? Math.max(pct, 1) : 0}%`, background: "#3fb950" }} />
+                      </div>
+                      <span className="text-xs font-bold w-8 text-right shrink-0" style={{ color: "#3fb950" }}>{count}</span>
+                      <span className="text-xs w-8 shrink-0" style={{ color: "var(--muted)" }}>{pct}%</span>
                     </div>
-                    <span className="text-xs font-bold w-8 text-right shrink-0" style={{ color: bucket.color }}>
-                      {count}
-                    </span>
-                    <span className="text-xs w-8 shrink-0" style={{ color: "var(--muted)" }}>
-                      {pct}%
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="px-4 py-2 border-t" style={{ borderColor: "var(--border)" }}>
               <p className="text-xs" style={{ color: "var(--muted)" }}>
-                Estimativa baseada no tempo desde o início da interação. As ações de inatividade disparam em 30min, 2h, 1 dia, 3 dias e 7 dias.
+                Estimativa baseada no tempo desde o início da interação. Reativação = resolvidos após 30min (provável resposta pós follow-up).
               </p>
             </div>
           </div>
