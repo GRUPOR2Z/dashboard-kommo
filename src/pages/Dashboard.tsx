@@ -97,6 +97,7 @@ function toTimestamp(dateStr: string, endOfDay = false): number {
 export default function Dashboard() {
   const [period, setPeriod] = useState<FilterPeriod>("30d");
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(null);
+  const [activeFunilTab, setActiveFunilTab] = useState<"vendas" | "negocia">("vendas");
   const { subdomain, clientName, pipelines, fieldIds, stageLabels, loading: configLoading } = useClientConfig();
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -359,20 +360,48 @@ export default function Dashboard() {
     setActiveDrawer((prev) => (prev === d ? null : d));
   }
 
-  const funilItems = FUNIL_STAGES.map((s) => ({
-    label: stageLabels[s.key] ?? s.label,
-    value: kpis?.byStage[s.key] ?? 0,
-    color:
-      s.key === "GANHO"
-        ? "var(--green)"
-        : s.key.includes("PERDIDO")
-        ? "#f85149"
-        : s.key.includes("FUP")
-        ? "#f0883e"
-        : s.key.includes("CONFIRMADA")
-        ? "#58a6ff"
-        : undefined,
-  })).filter((i) => i.value > 0);
+  const funilItems = useMemo(() => {
+    if (!kpis) return [];
+    const knownKeys = new Set(FUNIL_STAGES.map((s) => s.key));
+    const getColor = (key: string, label: string): string | undefined => {
+      if (key === "GANHO") return "var(--green)";
+      if (key.includes("PERDIDO")) return "#f85149";
+      if (key.includes("FUP") || label.toLowerCase().includes("fup")) return "#f0883e";
+      if (label.toLowerCase().includes("respec")) return "#d29922";
+      if (key.includes("CONFIRMADA")) return "#58a6ff";
+      return undefined;
+    };
+    const items = FUNIL_STAGES.map((s) => {
+      const label = stageLabels[s.key] ?? s.label;
+      return { key: s.key, label, value: kpis.byStage[s.key] ?? 0, color: getColor(s.key, label) };
+    });
+    for (const [key, value] of Object.entries(kpis.byStage)) {
+      if (!knownKeys.has(key)) {
+        const label = stageLabels[key] ?? key.replace("status_", "Etapa ");
+        items.push({ key, label, value, color: getColor(key, label) });
+      }
+    }
+    return items.filter((i) => i.value > 0);
+  }, [kpis, stageLabels]);
+
+  const clientesItems = useMemo(() => {
+    if (!clientesLeads || pipelines.FUNIL_ID === pipelines.CLIENTES_ID) return [];
+    const inPeriod = clientesLeads.filter((l) => leadInPeriod(l, period, customDates));
+    const counts: Record<string, number> = {};
+    for (const lead of inPeriod) {
+      const key = `status_${lead.status_id}`;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return Object.entries(counts)
+      .map(([key, value]) => ({
+        key,
+        label: stageLabels[key] ?? key.replace("status_", "Etapa "),
+        value,
+        color: undefined as string | undefined,
+      }))
+      .filter((i) => i.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [clientesLeads, pipelines, period, customDates, stageLabels]);
 
   const planoItems = CLIENTES_PLANOS.map((p) => ({
     label: p.label,
@@ -711,17 +740,34 @@ export default function Dashboard() {
             className="rounded-xl border p-5 md:col-span-2"
             style={{ background: "var(--card)", borderColor: "var(--border)" }}
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <BarChart3 size={14} style={{ color: "var(--green)" }} />
-                <h3 className="font-semibold text-sm" style={{ color: "var(--text)" }}>
-                  Funil de Vendas — Todos os leads
-                </h3>
+                <h3 className="font-semibold text-sm" style={{ color: "var(--text)" }}>Funil de Vendas</h3>
               </div>
               <span className="text-xs" style={{ color: "var(--muted)" }}>
-                {funilLeads?.length ?? 0} total
+                {activeFunilTab === "vendas" ? funilLeads?.length ?? 0 : clientesLeads?.length ?? 0} total
               </span>
             </div>
+
+            {clientesItems.length > 0 && (
+              <div className="flex gap-1 mb-4">
+                {(["vendas", "negocia"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveFunilTab(tab)}
+                    className="px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+                    style={{
+                      background: activeFunilTab === tab ? "var(--green)" : "var(--border)",
+                      color: activeFunilTab === tab ? "#fff" : "var(--muted)",
+                    }}
+                  >
+                    {tab === "vendas" ? "Funil de Vendas" : "Negociação"}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {loading ? (
               <div className="space-y-2">
                 {[1, 2, 3, 4].map((i) => (
@@ -730,16 +776,17 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="space-y-2">
-                {funilItems.map((item) => {
-                  const pct = Math.round(((item.value / Math.max(funilLeads?.length ?? 1, 1)) * 100));
+                {(activeFunilTab === "vendas" ? funilItems : clientesItems).map((item) => {
+                  const total = activeFunilTab === "vendas" ? (funilLeads?.length ?? 1) : (clientesLeads?.length ?? 1);
+                  const pct = Math.round((item.value / Math.max(total, 1)) * 100);
                   return (
-                    <div key={item.label} className="flex items-center gap-3">
+                    <div key={item.key} className="flex items-center gap-3">
                       <div className="text-xs w-44 shrink-0 truncate" style={{ color: "var(--muted)" }}>
                         {item.label}
                       </div>
                       <div className="flex-1 h-5 rounded overflow-hidden" style={{ background: "var(--border)" }}>
                         <div
-                          className="h-full rounded flex items-center px-2 transition-all duration-500"
+                          className="h-full rounded transition-all duration-500"
                           style={{ width: `${Math.max(pct, 2)}%`, background: item.color ?? "var(--green)", opacity: 0.85 }}
                         />
                       </div>
@@ -749,7 +796,7 @@ export default function Dashboard() {
                     </div>
                   );
                 })}
-                {funilItems.length === 0 && (
+                {(activeFunilTab === "vendas" ? funilItems : clientesItems).length === 0 && (
                   <p className="text-sm" style={{ color: "var(--muted)" }}>Nenhum dado disponível</p>
                 )}
               </div>
