@@ -28,6 +28,7 @@ import {
   fetchLeadsByPipeline,
   fetchStatusEvents,
   fetchNotesSample,
+  fetchPipelines,
   leadInPeriod,
 } from "../lib/kommo-api";
 import { formatBizTime, detectClosure, firstResponseMinutes } from "../lib/business-hours";
@@ -210,6 +211,24 @@ export default function Dashboard() {
     enabled: sampleLeadIds.length > 0,
     staleTime: 5 * 60 * 1000,
   });
+
+  // ── Pipeline structure (for stage sort order) ─────────────────────────────
+  const { data: pipelinesStructure } = useQuery({
+    queryKey: ["pipelines-structure"],
+    queryFn: fetchPipelines,
+    enabled: !configLoading && Object.keys(pipelineNames).length > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const stageSortMap = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const pipeline of pipelinesStructure ?? []) {
+      for (const status of pipeline._embedded?.statuses ?? []) {
+        map.set(status.id, status.sort);
+      }
+    }
+    return map;
+  }, [pipelinesStructure]);
 
   // ── Extra pipelines (from pipelineNames config) ───────────────────────────
   const extraPipelineIds = useMemo(() => {
@@ -503,11 +522,18 @@ export default function Dashboard() {
     return Object.entries(counts)
       .map(([configKey, { statusId, count }]) => {
         const label = stageLabels[`status_${statusId}`] ?? stageLabels[configKey] ?? configKey.replace(/_/g, " ");
-        return { key: configKey, label, value: count, color: getColor(configKey, label) };
+        return { key: configKey, label, value: count, color: getColor(configKey, label), statusId };
       })
       .filter((i) => i.value > 0)
-      .sort((a, b) => b.value - a.value);
-  }, [hasPipelineNames, activeFunilTab, activeFunilPipelineId, funilItems, clientesItems, pipelineLeadsMap, pipelines, stageLabels]);
+      .sort((a, b) => {
+        const aSort = stageSortMap.get(a.statusId);
+        const bSort = stageSortMap.get(b.statusId);
+        if (aSort !== undefined && bSort !== undefined) return aSort - bSort;
+        if (aSort !== undefined) return -1;
+        if (bSort !== undefined) return 1;
+        return b.value - a.value; // fallback: count desc
+      });
+  }, [hasPipelineNames, activeFunilTab, activeFunilPipelineId, funilItems, clientesItems, pipelineLeadsMap, pipelines, stageLabels, stageSortMap]);
 
   const activeFunilTotal = useMemo(() => {
     if (!hasPipelineNames) {
