@@ -241,23 +241,33 @@ export default function Dashboard() {
 
   const topStagesData = useMemo(() => {
     if (Object.keys(pipelineNames).length === 0) return [];
-    const combined: Record<string, number> = {};
+    // Map numeric status_id → named config key (e.g. 102229156 → "FUP_2")
+    const statusMap: Record<number, string> = {};
+    for (const [key, val] of Object.entries(pipelines)) {
+      if (typeof val === "number" && val > 0) statusMap[val] = key;
+    }
+    const combined: Record<string, { statusId: number; count: number }> = {};
     for (const [pipeId, leads] of pipelineLeadsMap) {
       if (pipelineNames[String(pipeId)]?.lixeira) continue;
       for (const lead of leads) {
-        const key = `status_${lead.status_id}`;
-        combined[key] = (combined[key] ?? 0) + 1;
+        const configKey = statusMap[lead.status_id] ?? `status_${lead.status_id}`;
+        if (!combined[configKey]) combined[configKey] = { statusId: lead.status_id, count: 0 };
+        combined[configKey].count += 1;
       }
     }
     return Object.entries(combined)
-      .map(([key, value]) => ({
-        key,
-        label: stageLabels[key] ?? key.replace("status_", "Etapa "),
-        value,
+      .map(([configKey, { statusId, count }]) => ({
+        key: configKey,
+        // status_XXXXXXXX in stage_labels takes priority, then config-key label, then key name
+        label:
+          stageLabels[`status_${statusId}`] ??
+          stageLabels[configKey] ??
+          configKey.replace(/_/g, " "),
+        value: count,
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
-  }, [pipelineLeadsMap, pipelineNames, stageLabels]);
+  }, [pipelineLeadsMap, pipelineNames, pipelines, stageLabels]);
 
   const loading = configLoading || funilLoading || clientesLoading || statusLoading || extraPipelineQueries.some((q) => q.isLoading);
 
