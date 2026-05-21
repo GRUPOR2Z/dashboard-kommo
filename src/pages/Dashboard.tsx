@@ -60,7 +60,8 @@ const FILTER_OPTIONS: { label: string; value: FilterPeriod }[] = [
   { label: "Período", value: "custom" },
 ];
 
-const DEFAULT_SECTION_ORDER = ["followup", "consultas", "visao-geral", "secoes", "atendimento"];
+const DEFAULT_SECTION_ORDER = ["followup", "qualificacao-ia", "consultas", "visao-geral", "secoes", "atendimento"];
+const FEB_2026 = Math.floor(new Date(2026, 1, 1).getTime() / 1000);
 const SECTION_ORDER_KEY = "kommo_section_order";
 
 function eventInPeriod(
@@ -189,7 +190,8 @@ export default function Dashboard() {
     queryKey: ["status-events", pipelines.FUNIL_ID],
     queryFn: () => {
       const now = Math.floor(Date.now() / 1000);
-      const from = now - 90 * 86400;
+      // Extend back to Feb 1 2026 to cover the AI qualification history window
+      const from = Math.min(now - 90 * 86400, FEB_2026);
       return fetchStatusEvents(from, now);
     },
     enabled: !configLoading && !!pipelines.FUNIL_ID,
@@ -291,14 +293,60 @@ export default function Dashboard() {
 
   const loading = configLoading || funilLoading || clientesLoading || statusLoading || extraPipelineQueries.some((q) => q.isLoading);
 
+  // ── AI Qualification metrics (since Feb 2026) ──────────────────────────────
+  const aiQualifications = useMemo(() => {
+    if (!statusEvents || !pipelines.LEADS_ENTRADA || !pipelines.CONTATO_INICIAL) return null;
+
+    const totalEntrada = new Set<number>();
+    const qualified = new Set<number>();
+
+    for (const event of statusEvents) {
+      if (event.created_at < FEB_2026) continue;
+      if (event.status_after === pipelines.LEADS_ENTRADA) totalEntrada.add(event.lead_id);
+      if (event.status_before === pipelines.LEADS_ENTRADA && event.status_after === pipelines.CONTATO_INICIAL) {
+        qualified.add(event.lead_id);
+      }
+    }
+    // Leads created in the main funnel since Feb 2026 (enter directly into first status)
+    for (const lead of funilLeads ?? []) {
+      if (lead.created_at >= FEB_2026) totalEntrada.add(lead.id);
+    }
+
+    const taxaQualificacao =
+      totalEntrada.size > 0 ? Math.round((qualified.size / totalEntrada.size) * 1000) / 10 : 0;
+
+    // Conversion: qualified leads currently in any non-main, non-lixeira pipeline
+    const convertedLeadIds = new Set<number>();
+    for (const [pipeId, leads] of pipelineLeadsMap) {
+      if (pipeId === pipelines.FUNIL_ID) continue;
+      if (pipelineNames[String(pipeId)]?.lixeira) continue;
+      for (const lead of leads) {
+        if (qualified.has(lead.id)) convertedLeadIds.add(lead.id);
+      }
+    }
+
+    const taxaConversao =
+      qualified.size > 0 ? Math.round((convertedLeadIds.size / qualified.size) * 1000) / 10 : 0;
+
+    return {
+      totalEntrada: totalEntrada.size,
+      totalQualificados: qualified.size,
+      taxaQualificacao,
+      totalConvertidos: convertedLeadIds.size,
+      taxaConversao,
+    };
+  }, [statusEvents, funilLeads, pipelineLeadsMap, pipelineNames, pipelines]);
+
   // ── Sections available for this client's pipeline config ───────────────────
   const availableSections = useMemo(() => {
     const hasFup = pipelines.FUP_1 > 0 || pipelines.FUP_2 > 0 || pipelines.FUP_3 > 0;
     const hasPlanos = pipelines.AVULSA > 0 || pipelines.TRIMESTRAL > 0 || pipelines.SEMESTRAL > 0 || pipelines.ANUAL > 0;
     const isMainOrAll = !activePipelineId || activePipelineId === pipelines.FUNIL_ID;
     const isClientePipeline = activePipelineId === pipelines.CLIENTES_ID;
+    const hasAIQualif = pipelines.LEADS_ENTRADA > 0 && pipelines.CONTATO_INICIAL > 0 && isMainOrAll;
     return new Set([
       ...(hasFup && isMainOrAll ? ["followup"] : []),
+      ...(hasAIQualif ? ["qualificacao-ia"] : []),
       ...(hasPlanos && (isMainOrAll || isClientePipeline) ? ["consultas"] : []),
       "visao-geral",
       "secoes",
@@ -720,6 +768,108 @@ export default function Dashboard() {
               </div>
             )}
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderQualificacaoIA() {
+    const q = aiQualifications;
+    return (
+      <div
+        className="rounded-xl border p-5"
+        style={{ background: "var(--card)", borderColor: "var(--border)" }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div
+              draggable
+              onDragStart={() => onDragStart("qualificacao-ia")}
+              onDragEnd={onDragEnd}
+              style={{ cursor: "grab", touchAction: "none" }}
+              title="Arrastar para reordenar"
+            >
+              <GripVertical size={14} style={{ color: "var(--muted)", opacity: 0.5 }} />
+            </div>
+            <Activity size={14} style={{ color: "#a371f7" }} />
+            <h2 className="font-semibold text-sm" style={{ color: "var(--text)" }}>
+              Qualificação por IA
+            </h2>
+          </div>
+          <span className="text-xs" style={{ color: "var(--muted)" }}>Desde fev/2026 · todos os leads recebidos</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          {/* Taxa de Qualificação */}
+          <div className="rounded-lg border p-4" style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle2 size={12} style={{ color: "#a371f7" }} />
+              <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+                Qualificados pela IA
+              </span>
+            </div>
+            {loading ? (
+              <div className="h-9 rounded animate-pulse" style={{ background: "var(--border)" }} />
+            ) : (
+              <>
+                <div className="text-3xl font-bold" style={{ color: "#a371f7" }}>
+                  {q?.totalQualificados ?? 0}
+                </div>
+                <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                  de {q?.totalEntrada ?? 0} leads recebidos
+                </p>
+                <div className="mt-3">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span style={{ color: "var(--muted)" }}>Taxa de qualificação</span>
+                    <span style={{ color: "#a371f7" }} className="font-bold">{q?.taxaQualificacao ?? 0}%</span>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(q?.taxaQualificacao ?? 0, 100)}%`, background: "#a371f7" }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Taxa de Conversão */}
+          <div className="rounded-lg border p-4" style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp size={12} style={{ color: "var(--green)" }} />
+              <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+                Viraram Clientes
+              </span>
+            </div>
+            {loading ? (
+              <div className="h-9 rounded animate-pulse" style={{ background: "var(--border)" }} />
+            ) : (
+              <>
+                <div className="text-3xl font-bold" style={{ color: "var(--green)" }}>
+                  {q?.totalConvertidos ?? 0}
+                </div>
+                <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                  de {q?.totalQualificados ?? 0} qualificados
+                </p>
+                <div className="mt-3">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span style={{ color: "var(--muted)" }}>Taxa de conversão</span>
+                    <span style={{ color: "var(--green)" }} className="font-bold">{q?.taxaConversao ?? 0}%</span>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(q?.taxaConversao ?? 0, 100)}%`, background: "var(--green)" }}
+                    />
+                  </div>
+                  <p className="text-xs mt-2" style={{ color: "var(--muted)" }}>
+                    Consulta Realizada · Pós-op · Procedimentos
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -1242,6 +1392,7 @@ export default function Dashboard() {
 
   const sectionRenderers: Record<string, () => React.ReactNode> = {
     followup: renderFollowUp,
+    "qualificacao-ia": renderQualificacaoIA,
     consultas: renderConsultas,
     "visao-geral": renderVisaoGeral,
     secoes: renderSecoes,
