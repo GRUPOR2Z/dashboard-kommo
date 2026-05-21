@@ -99,6 +99,7 @@ export default function Dashboard() {
   const [period, setPeriod] = useState<FilterPeriod>("30d");
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(null);
   const [activeFunilTab, setActiveFunilTab] = useState<"vendas" | "negocia">("vendas");
+  const [activeFunilPipelineId, setActiveFunilPipelineId] = useState<number | null>(null);
   const [activePipelineId, setActivePipelineId] = useState<number | null>(null);
   const { subdomain, clientName, pipelines, fieldIds, stageLabels, pipelineNames, loading: configLoading } = useClientConfig();
 
@@ -471,6 +472,50 @@ export default function Dashboard() {
       .filter((i) => i.value > 0)
       .sort((a, b) => b.value - a.value);
   }, [clientesLeads, pipelines, period, customDates, stageLabels]);
+
+  // ── Active funil tab items ────────────────────────────────────────────────
+  const hasPipelineNames = Object.keys(pipelineNames).length > 0;
+
+  const activeFunilItems = useMemo(() => {
+    if (!hasPipelineNames) {
+      return activeFunilTab === "vendas" ? funilItems : clientesItems;
+    }
+    const pipelineId = activeFunilPipelineId ?? pipelines.FUNIL_ID;
+    const leads = pipelineLeadsMap.get(pipelineId) ?? [];
+    const statusMap: Record<number, string> = {};
+    for (const [key, val] of Object.entries(pipelines)) {
+      if (typeof val === "number" && val > 0) statusMap[val] = key;
+    }
+    const getColor = (key: string, label: string): string | undefined => {
+      if (key === "GANHO") return "var(--green)";
+      if (key.includes("PERDIDO")) return "#f85149";
+      if (key.includes("FUP") || label.toLowerCase().includes("fup")) return "#f0883e";
+      if (label.toLowerCase().includes("respec")) return "#d29922";
+      if (key.includes("CONFIRMADA")) return "#58a6ff";
+      return undefined;
+    };
+    const counts: Record<string, { statusId: number; count: number }> = {};
+    for (const lead of leads) {
+      const configKey = statusMap[lead.status_id] ?? `status_${lead.status_id}`;
+      if (!counts[configKey]) counts[configKey] = { statusId: lead.status_id, count: 0 };
+      counts[configKey].count += 1;
+    }
+    return Object.entries(counts)
+      .map(([configKey, { statusId, count }]) => {
+        const label = stageLabels[`status_${statusId}`] ?? stageLabels[configKey] ?? configKey.replace(/_/g, " ");
+        return { key: configKey, label, value: count, color: getColor(configKey, label) };
+      })
+      .filter((i) => i.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [hasPipelineNames, activeFunilTab, activeFunilPipelineId, funilItems, clientesItems, pipelineLeadsMap, pipelines, stageLabels]);
+
+  const activeFunilTotal = useMemo(() => {
+    if (!hasPipelineNames) {
+      return activeFunilTab === "vendas" ? (funilLeads?.length ?? 0) : (clientesLeads?.length ?? 0);
+    }
+    const pipelineId = activeFunilPipelineId ?? pipelines.FUNIL_ID;
+    return pipelineLeadsMap.get(pipelineId)?.length ?? 0;
+  }, [hasPipelineNames, activeFunilTab, activeFunilPipelineId, funilLeads, clientesLeads, pipelineLeadsMap, pipelines.FUNIL_ID]);
 
   const planoItems = CLIENTES_PLANOS.map((p) => ({
     label: p.label,
@@ -859,29 +904,55 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <BarChart3 size={14} style={{ color: "var(--green)" }} />
-                <h3 className="font-semibold text-sm" style={{ color: "var(--text)" }}>Funil de Vendas</h3>
+                <h3 className="font-semibold text-sm" style={{ color: "var(--text)" }}>
+                  {hasPipelineNames ? "Funis" : "Funil de Vendas"}
+                </h3>
               </div>
               <span className="text-xs" style={{ color: "var(--muted)" }}>
-                {activeFunilTab === "vendas" ? funilLeads?.length ?? 0 : clientesLeads?.length ?? 0} total
+                {activeFunilTotal} total
               </span>
             </div>
 
-            {clientesItems.length > 0 && (
-              <div className="flex gap-1 mb-4">
-                {(["vendas", "negocia"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveFunilTab(tab)}
-                    className="px-3 py-1 rounded-lg text-xs font-medium transition-colors"
-                    style={{
-                      background: activeFunilTab === tab ? "var(--green)" : "var(--border)",
-                      color: activeFunilTab === tab ? "#fff" : "var(--muted)",
-                    }}
-                  >
-                    {tab === "vendas" ? "Funil de Vendas" : "Negociação"}
-                  </button>
-                ))}
+            {hasPipelineNames ? (
+              <div className="flex flex-wrap gap-1 mb-4">
+                {Object.entries(pipelineNames)
+                  .filter(([, entry]) => !entry.lixeira)
+                  .map(([idStr, entry]) => {
+                    const id = Number(idStr);
+                    const isActive = (activeFunilPipelineId ?? pipelines.FUNIL_ID) === id;
+                    return (
+                      <button
+                        key={idStr}
+                        onClick={() => setActiveFunilPipelineId(id)}
+                        className="px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+                        style={{
+                          background: isActive ? "var(--green)" : "var(--border)",
+                          color: isActive ? "#fff" : "var(--muted)",
+                        }}
+                      >
+                        {entry.name}
+                      </button>
+                    );
+                  })}
               </div>
+            ) : (
+              clientesItems.length > 0 && (
+                <div className="flex gap-1 mb-4">
+                  {(["vendas", "negocia"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveFunilTab(tab)}
+                      className="px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+                      style={{
+                        background: activeFunilTab === tab ? "var(--green)" : "var(--border)",
+                        color: activeFunilTab === tab ? "#fff" : "var(--muted)",
+                      }}
+                    >
+                      {tab === "vendas" ? "Funil de Vendas" : "Negociação"}
+                    </button>
+                  ))}
+                </div>
+              )
             )}
 
             {loading ? (
@@ -892,9 +963,8 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="space-y-2">
-                {(activeFunilTab === "vendas" ? funilItems : clientesItems).map((item) => {
-                  const total = activeFunilTab === "vendas" ? (funilLeads?.length ?? 1) : (clientesLeads?.length ?? 1);
-                  const pct = Math.round((item.value / Math.max(total, 1)) * 100);
+                {activeFunilItems.map((item) => {
+                  const pct = Math.round((item.value / Math.max(activeFunilTotal, 1)) * 100);
                   return (
                     <div key={item.key} className="flex items-center gap-3">
                       <div className="text-xs w-44 shrink-0 truncate" style={{ color: "var(--muted)" }}>
@@ -912,7 +982,7 @@ export default function Dashboard() {
                     </div>
                   );
                 })}
-                {(activeFunilTab === "vendas" ? funilItems : clientesItems).length === 0 && (
+                {activeFunilItems.length === 0 && (
                   <p className="text-sm" style={{ color: "var(--muted)" }}>Nenhum dado disponível</p>
                 )}
               </div>
