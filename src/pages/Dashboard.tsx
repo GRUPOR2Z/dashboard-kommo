@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import {
   Users,
   CheckCircle2,
@@ -23,6 +23,7 @@ import {
   Stethoscope,
 } from "lucide-react";
 import type { FilterPeriod } from "../lib/types";
+import type { KommoLead } from "../lib/types";
 import {
   fetchLeadsByPipeline,
   fetchStatusEvents,
@@ -98,7 +99,8 @@ export default function Dashboard() {
   const [period, setPeriod] = useState<FilterPeriod>("30d");
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(null);
   const [activeFunilTab, setActiveFunilTab] = useState<"vendas" | "negocia">("vendas");
-  const { subdomain, clientName, pipelines, fieldIds, stageLabels, loading: configLoading } = useClientConfig();
+  const [activePipelineId, setActivePipelineId] = useState<number | null>(null);
+  const { subdomain, clientName, pipelines, fieldIds, stageLabels, pipelineNames, loading: configLoading } = useClientConfig();
 
   const todayStr = new Date().toISOString().split("T")[0];
   const thirtyAgoStr = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
@@ -208,26 +210,83 @@ export default function Dashboard() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const loading = configLoading || funilLoading || clientesLoading || statusLoading;
+  // ── Extra pipelines (from pipelineNames config) ───────────────────────────
+  const extraPipelineIds = useMemo(() => {
+    return Object.keys(pipelineNames)
+      .map(Number)
+      .filter((id) => id !== pipelines.FUNIL_ID && id !== pipelines.CLIENTES_ID);
+  }, [pipelineNames, pipelines.FUNIL_ID, pipelines.CLIENTES_ID]);
+
+  const extraPipelineQueries = useQueries({
+    queries: extraPipelineIds.map((id) => ({
+      queryKey: ["pipeline-leads", id] as const,
+      queryFn: () => fetchLeadsByPipeline(id),
+      enabled: !configLoading && id > 0,
+      staleTime: 2 * 60 * 1000,
+    })),
+  });
+
+  const pipelineLeadsMap = useMemo(() => {
+    const map = new Map<number, KommoLead[]>();
+    if (funilLeads) map.set(pipelines.FUNIL_ID, funilLeads);
+    if (clientesLeads && pipelines.CLIENTES_ID !== pipelines.FUNIL_ID) {
+      map.set(pipelines.CLIENTES_ID, clientesLeads);
+    }
+    extraPipelineIds.forEach((id, i) => {
+      const data = extraPipelineQueries[i]?.data;
+      if (data) map.set(id, data);
+    });
+    return map;
+  }, [funilLeads, clientesLeads, pipelines.FUNIL_ID, pipelines.CLIENTES_ID, extraPipelineIds, extraPipelineQueries]);
+
+  const topStagesData = useMemo(() => {
+    if (Object.keys(pipelineNames).length === 0) return [];
+    const combined: Record<string, number> = {};
+    for (const [pipeId, leads] of pipelineLeadsMap) {
+      if (pipelineNames[String(pipeId)]?.lixeira) continue;
+      for (const lead of leads) {
+        const key = `status_${lead.status_id}`;
+        combined[key] = (combined[key] ?? 0) + 1;
+      }
+    }
+    return Object.entries(combined)
+      .map(([key, value]) => ({
+        key,
+        label: stageLabels[key] ?? key.replace("status_", "Etapa "),
+        value,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [pipelineLeadsMap, pipelineNames, stageLabels]);
+
+  const loading = configLoading || funilLoading || clientesLoading || statusLoading || extraPipelineQueries.some((q) => q.isLoading);
 
   // ── Sections available for this client's pipeline config ───────────────────
   const availableSections = useMemo(() => {
     const hasFup = pipelines.FUP_1 > 0 || pipelines.FUP_2 > 0 || pipelines.FUP_3 > 0;
     const hasPlanos = pipelines.AVULSA > 0 || pipelines.TRIMESTRAL > 0 || pipelines.SEMESTRAL > 0 || pipelines.ANUAL > 0;
+    const isMainOrAll = !activePipelineId || activePipelineId === pipelines.FUNIL_ID;
+    const isClientePipeline = activePipelineId === pipelines.CLIENTES_ID;
     return new Set([
-      ...(hasFup ? ["followup"] : []),
-      ...(hasPlanos ? ["consultas"] : []),
+      ...(hasFup && isMainOrAll ? ["followup"] : []),
+      ...(hasPlanos && (isMainOrAll || isClientePipeline) ? ["consultas"] : []),
       "visao-geral",
       "secoes",
       "atendimento",
     ]);
-  }, [pipelines]);
+  }, [pipelines, activePipelineId]);
 
   // ── KPIs ───────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
-    if (!funilLeads || !clientesLeads || !statusEvents) return null;
+    if (!statusEvents) return null;
+    if (activePipelineId) {
+      const activeLeads = pipelineLeadsMap.get(activePipelineId) ?? [];
+      const pConfig = { ...pipelines, FUNIL_ID: activePipelineId, CLIENTES_ID: activePipelineId };
+      return computeKPIs(activeLeads, activeLeads, period, statusEvents, customDates, pConfig, fieldIds);
+    }
+    if (!funilLeads || !clientesLeads) return null;
     return computeKPIs(funilLeads, clientesLeads, period, statusEvents, customDates, pipelines, fieldIds);
-  }, [funilLeads, clientesLeads, statusEvents, period, customDates, pipelines, fieldIds]);
+  }, [activePipelineId, pipelineLeadsMap, funilLeads, clientesLeads, statusEvents, period, customDates, pipelines, fieldIds]);
 
   const followUpRate = useMemo(() => {
     if (!statusEvents) return null;
@@ -736,6 +795,53 @@ export default function Dashboard() {
           </h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {topStagesData.length > 0 && (
+            <div
+              className="rounded-xl border p-5 md:col-span-2 xl:col-span-3"
+              style={{ background: "var(--card)", borderColor: "var(--border)" }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <BarChart3 size={14} style={{ color: "#a371f7" }} />
+                  <h3 className="font-semibold text-sm" style={{ color: "var(--text)" }}>Etapas com Mais Leads</h3>
+                </div>
+                <span className="text-xs" style={{ color: "var(--muted)" }}>
+                  Top {topStagesData.length} · todos os funis (exceto lixeira)
+                </span>
+              </div>
+              {loading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="h-7 rounded animate-pulse" style={{ background: "var(--border)" }} />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {topStagesData.map((item) => {
+                    const maxVal = topStagesData[0]?.value ?? 1;
+                    const pct = Math.round((item.value / Math.max(maxVal, 1)) * 100);
+                    return (
+                      <div key={item.key} className="flex items-center gap-3">
+                        <div className="text-xs w-48 shrink-0 truncate" style={{ color: "var(--muted)" }}>
+                          {item.label}
+                        </div>
+                        <div className="flex-1 h-5 rounded overflow-hidden" style={{ background: "var(--border)" }}>
+                          <div
+                            className="h-full rounded transition-all duration-500"
+                            style={{ width: `${Math.max(pct, 2)}%`, background: "#a371f7", opacity: 0.85 }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold w-8 text-right shrink-0" style={{ color: "#a371f7" }}>
+                          {item.value}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           <div
             className="rounded-xl border p-5 md:col-span-2"
             style={{ background: "var(--card)", borderColor: "var(--border)" }}
@@ -1046,7 +1152,9 @@ export default function Dashboard() {
             {clientName || "Dashboard"}
           </h1>
           <p className="text-sm mt-0.5" style={{ color: "var(--muted)" }}>
-            {funilLeads
+            {activePipelineId
+              ? `Visualizando: ${pipelineNames[String(activePipelineId)]?.name ?? "Funil"} · ${pipelineLeadsMap.get(activePipelineId)?.length ?? "..."} leads`
+              : funilLeads
               ? `${funilLeads.length} leads no funil · ${clientesLeads?.length ?? 0} clientes ativos`
               : "Carregando dados..."}
           </p>
@@ -1124,6 +1232,42 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {/* ── Pipeline selector ────────────────────────────────────────────── */}
+      {Object.keys(pipelineNames).length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setActivePipelineId(null)}
+            className="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors"
+            style={{
+              background: activePipelineId === null ? "var(--green)" : "var(--card)",
+              borderColor: activePipelineId === null ? "var(--green)" : "var(--border)",
+              color: activePipelineId === null ? "#000" : "var(--muted)",
+            }}
+          >
+            Todos
+          </button>
+          {Object.entries(pipelineNames).map(([idStr, entry]) => {
+            const id = Number(idStr);
+            const isActive = activePipelineId === id;
+            const isLixeira = entry.lixeira;
+            return (
+              <button
+                key={idStr}
+                onClick={() => setActivePipelineId(isActive ? null : id)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors"
+                style={{
+                  background: isActive ? (isLixeira ? "#f85149" : "var(--green)") : "var(--card)",
+                  borderColor: isActive ? (isLixeira ? "#f85149" : "var(--green)") : "var(--border)",
+                  color: isActive ? (isLixeira ? "#fff" : "#000") : isLixeira ? "#f85149" : "var(--muted)",
+                }}
+              >
+                {entry.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Error ─────────────────────────────────────────────────────────── */}
       {funilError && (
