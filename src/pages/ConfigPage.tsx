@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Save, RefreshCw, CheckCircle, AlertCircle, Search, Plus, Trash2, Tag } from "lucide-react";
+import { Save, RefreshCw, CheckCircle, AlertCircle, Search, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import type { FieldConfig } from "../lib/config";
-import { testConnection, fetchCustomFields } from "../lib/kommo-api";
+import { testConnection, fetchCustomFields, fetchPipelines } from "../lib/kommo-api";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import { useClientConfig } from "../contexts/ClientConfigContext";
@@ -70,6 +70,19 @@ export default function ConfigPage() {
     retry: 0,
   });
 
+  const {
+    data: pipelines,
+    isLoading: pipelinesLoading,
+    refetch: loadPipelines,
+  } = useQuery({
+    queryKey: ["pipelines-stages"],
+    queryFn: fetchPipelines,
+    enabled: false,
+    retry: 0,
+  });
+
+  const [expandedPipeline, setExpandedPipeline] = useState<number | null>(null);
+
   async function handleSave() {
     setSaveError(null);
     if (!user) return;
@@ -115,8 +128,17 @@ export default function ConfigPage() {
     );
   }
 
-  function addLabel() {
-    setEditedStageLabels((prev) => [...(prev ?? []), ["", ""]]);
+  function addLabel(key = "", value = "") {
+    setEditedStageLabels((prev) => [...(prev ?? []), [key, value]]);
+  }
+
+  function addStageFromDiscovery(statusId: number, name: string) {
+    const key = `status_${statusId}`;
+    setEditedStageLabels((prev) => {
+      const existing = prev ?? [];
+      if (existing.some(([k]) => k === key)) return existing;
+      return [...existing, [key, name]];
+    });
   }
 
   function removeLabel(idx: number) {
@@ -269,10 +291,71 @@ export default function ConfigPage() {
         {/* Nomes das Colunas */}
         <Section title="Nomes das Colunas">
           <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
-            Personalize o nome de cada etapa do funil exibida no dashboard. Use a chave de config
-            (ex: <span className="font-mono">FUP_1</span>) ou o ID da etapa (ex:{" "}
-            <span className="font-mono">status_106144984</span>).
+            Personalize o nome de cada etapa do funil exibida no dashboard. Use "Descobrir etapas"
+            para importar os nomes direto do Kommo.
           </p>
+
+          {/* Descobrir etapas */}
+          <button
+            onClick={() => loadPipelines()}
+            disabled={pipelinesLoading}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border mb-4"
+            style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--muted)" }}
+          >
+            <Search size={11} className={pipelinesLoading ? "animate-spin" : ""} />
+            Descobrir etapas da minha conta
+          </button>
+
+          {pipelines && pipelines.length > 0 && (
+            <div
+              className="rounded-lg border mb-4 overflow-hidden"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {pipelines.map((pipeline) => {
+                const statuses = pipeline._embedded?.statuses ?? [];
+                const isOpen = expandedPipeline === pipeline.id;
+                return (
+                  <div key={pipeline.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <button
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-left hover:opacity-80"
+                      style={{ background: "var(--bg)", color: "var(--text)" }}
+                      onClick={() => setExpandedPipeline(isOpen ? null : pipeline.id)}
+                    >
+                      <span>{pipeline.name}</span>
+                      <div className="flex items-center gap-2" style={{ color: "var(--muted)" }}>
+                        <span>{statuses.length} etapas</span>
+                        {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                      </div>
+                    </button>
+                    {isOpen && (
+                      <div className="px-3 pb-2 space-y-1" style={{ background: "var(--card)" }}>
+                        {statuses.sort((a, b) => a.sort - b.sort).map((s) => (
+                          <div key={s.id} className="flex items-center justify-between text-xs py-1">
+                            <span style={{ color: "var(--text)" }}>{s.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="font-mono px-1.5 py-0.5 rounded"
+                                style={{ background: "var(--border)", color: "var(--muted)" }}
+                              >
+                                status_{s.id}
+                              </span>
+                              <button
+                                onClick={() => addStageFromDiscovery(s.id, s.name)}
+                                className="px-2 py-0.5 rounded text-xs font-medium hover:opacity-80"
+                                style={{ background: "var(--green-dim)", color: "var(--green)" }}
+                              >
+                                + Adicionar
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <div className="space-y-2">
             {currentStageLabels.map(([key, value], idx) => (
@@ -314,7 +397,7 @@ export default function ConfigPage() {
           )}
 
           <button
-            onClick={addLabel}
+            onClick={() => addLabel()}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border mt-3 transition-colors hover:opacity-80"
             style={{ background: "var(--green-dim)", borderColor: "var(--green)", color: "var(--green)" }}
           >
