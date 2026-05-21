@@ -1,20 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Save, RefreshCw, CheckCircle, AlertCircle, Search, Plus, Trash2 } from "lucide-react";
-import { getConfig, saveConfig, resetConfig } from "../lib/config";
-import type { AppConfig, ExtraField } from "../lib/config";
+import { Save, RefreshCw, CheckCircle, AlertCircle, Search, Plus, Trash2, Tag } from "lucide-react";
+import type { FieldConfig } from "../lib/config";
 import { testConnection, fetchCustomFields } from "../lib/kommo-api";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
+import { useClientConfig } from "../contexts/ClientConfigContext";
 
 export default function ConfigPage() {
   const { user } = useAuth();
-  const [config, setConfig] = useState<AppConfig>(getConfig());
-  const [extraFields, setExtraFields] = useState<ExtraField[]>(getConfig().extraFields);
+  const { subdomain, fieldIds, stageLabels, loading: configLoading } = useClientConfig();
+
+  const [apiToken, setApiToken] = useState("");
+  const [editedFieldIds, setEditedFieldIds] = useState<FieldConfig | null>(null);
+  const [editedStageLabels, setEditedStageLabels] = useState<[string, string][] | null>(null);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Load api_token from Supabase on mount so the field shows the current saved value
+  const initialized = useRef(false);
+
+  // Load api_token from Supabase (not in context)
   useEffect(() => {
     if (!user) return;
     supabase
@@ -24,10 +29,22 @@ export default function ConfigPage() {
       .single()
       .then(({ data }) => {
         if (data?.api_token && data.api_token !== "pendente") {
-          setConfig((c) => ({ ...c, apiToken: data.api_token }));
+          setApiToken(data.api_token);
         }
       });
   }, [user?.id]);
+
+  // Sync from context once loaded
+  useEffect(() => {
+    if (!configLoading && !initialized.current) {
+      initialized.current = true;
+      setEditedFieldIds({ ...fieldIds });
+      setEditedStageLabels(Object.entries(stageLabels));
+    }
+  }, [configLoading, fieldIds, stageLabels]);
+
+  const currentFieldIds = editedFieldIds ?? fieldIds;
+  const currentStageLabels = editedStageLabels ?? Object.entries(stageLabels);
 
   const {
     data: connData,
@@ -55,355 +72,293 @@ export default function ConfigPage() {
 
   async function handleSave() {
     setSaveError(null);
-    // Save api_token to Supabase so the proxy can read it
-    if (user) {
-      const { error } = await supabase
-        .from("client_configs")
-        .update({ api_token: config.apiToken })
-        .eq("user_id", user.id);
-      if (error) {
-        setSaveError("Erro ao salvar token: " + error.message);
-        return;
-      }
+    if (!user) return;
+
+    const stageLabelsObj = Object.fromEntries(
+      currentStageLabels.filter(([k]) => k.trim())
+    );
+
+    const { error } = await supabase
+      .from("client_configs")
+      .update({
+        api_token: apiToken,
+        field_ids: currentFieldIds,
+        stage_labels: stageLabelsObj,
+      })
+      .eq("user_id", user.id);
+
+    if (error) {
+      setSaveError("Erro ao salvar: " + error.message);
+      return;
     }
-    // Save remaining config to localStorage
-    saveConfig({ ...config, extraFields });
+
     setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-    window.location.reload();
-  }
-
-  function handleReset() {
-    if (confirm("Resetar para as configurações padrão?")) {
-      resetConfig();
+    setTimeout(() => {
+      setSaved(false);
       window.location.reload();
-    }
+    }, 1500);
   }
 
-  function addExtraField() {
-    setExtraFields((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), label: "", fieldId: 0 },
-    ]);
+  function updateFieldId(key: keyof FieldConfig, val: number) {
+    setEditedFieldIds((prev) => ({ ...(prev ?? fieldIds), [key]: val }));
   }
 
-  function removeExtraField(id: string) {
-    setExtraFields((prev) => prev.filter((f) => f.id !== id));
-  }
-
-  function updateExtraField(id: string, patch: Partial<ExtraField>) {
-    setExtraFields((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, ...patch } : f))
+  function updateLabelKey(idx: number, key: string) {
+    setEditedStageLabels((prev) =>
+      prev ? prev.map((e, i) => (i === idx ? [key, e[1]] : e)) : prev
     );
   }
 
-  const inputCls =
-    "w-full rounded-lg px-3 py-2 text-sm outline-none font-mono";
+  function updateLabelValue(idx: number, value: string) {
+    setEditedStageLabels((prev) =>
+      prev ? prev.map((e, i) => (i === idx ? [e[0], value] : e)) : prev
+    );
+  }
+
+  function addLabel() {
+    setEditedStageLabels((prev) => [...(prev ?? []), ["", ""]]);
+  }
+
+  function removeLabel(idx: number) {
+    setEditedStageLabels((prev) => (prev ? prev.filter((_, i) => i !== idx) : prev));
+  }
+
+  const inputCls = "w-full rounded-lg px-3 py-2 text-sm outline-none font-mono";
   const inputStyle = {
     background: "var(--bg)",
     border: "1px solid var(--border)",
     color: "var(--text)",
   } as React.CSSProperties;
 
+  if (configLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>Carregando configurações...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full overflow-y-auto">
-    <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
-      <div>
-        <h1 className="text-xl font-bold" style={{ color: "var(--text)" }}>
-          Configurações
-        </h1>
-        <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Credenciais e IDs dos campos personalizados da conta Kommo
-        </p>
-      </div>
-
-      {/* Connection */}
-      <Section title="Conexão Kommo">
-        <div className="space-y-4">
-          <Field label="Subdomínio">
-            <input
-              className={inputCls}
-              style={inputStyle}
-              value={config.subdomain}
-              onChange={(e) =>
-                setConfig((c) => ({ ...c, subdomain: e.target.value }))
-              }
-            />
-          </Field>
-
-          <Field label="API Token (Bearer JWT)">
-            <textarea
-              className={inputCls}
-              style={{ ...inputStyle, resize: "vertical", minHeight: "80px" }}
-              value={config.apiToken}
-              onChange={(e) =>
-                setConfig((c) => ({ ...c, apiToken: e.target.value }))
-              }
-            />
-          </Field>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => testConn()}
-              disabled={connFetching}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-              style={{
-                background: "var(--green)",
-                color: "#000",
-                opacity: connFetching ? 0.7 : 1,
-              }}
-            >
-              <RefreshCw
-                size={13}
-                className={connFetching ? "animate-spin" : ""}
-              />
-              Testar conexão
-            </button>
-
-            {connData?.success && (
-              <div
-                className="flex items-center gap-2 text-sm"
-                style={{ color: "var(--green)" }}
-              >
-                <CheckCircle size={14} />
-                Conectado · {(connData.account as { name?: string }).name}
-              </div>
-            )}
-            {connError && (
-              <div
-                className="flex items-center gap-2 text-sm"
-                style={{ color: "#f85149" }}
-              >
-                <AlertCircle size={14} />
-                {(connError as Error).message.slice(0, 80)}
-              </div>
-            )}
-          </div>
+      <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
+        <div>
+          <h1 className="text-xl font-bold" style={{ color: "var(--text)" }}>
+            Configurações
+          </h1>
+          <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
+            Conta: <span className="font-mono" style={{ color: "var(--green)" }}>{subdomain}.kommo.com</span>
+          </p>
         </div>
-      </Section>
 
-      {/* Fields */}
-      <Section title="Campos Personalizados">
-        <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
-          Clique em "Descobrir campos" para listar os IDs da sua conta. Clique
-          no ID para copiá-lo.
-        </p>
-
-        <button
-          onClick={() => loadFields()}
-          disabled={fieldsLoading}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border mb-4"
-          style={{
-            background: "var(--card)",
-            borderColor: "var(--border)",
-            color: "var(--muted)",
-          }}
-        >
-          <Search size={11} className={fieldsLoading ? "animate-spin" : ""} />
-          Descobrir campos da minha conta
-        </button>
-
-        {fields && fields.length > 0 && (
-          <div
-            className="rounded-lg border p-3 mb-4 max-h-48 overflow-y-auto"
-            style={{ background: "var(--bg)", borderColor: "var(--border)" }}
-          >
-            <div className="space-y-1">
-              {fields.map((f) => (
-                <div
-                  key={f.id}
-                  className="flex items-center justify-between text-xs"
-                >
-                  <span style={{ color: "var(--text)" }}>{f.name}</span>
-                  <span
-                    className="font-mono px-1.5 py-0.5 rounded cursor-pointer hover:opacity-80"
-                    style={{
-                      background: "var(--green-dim)",
-                      color: "var(--green)",
-                    }}
-                    onClick={() =>
-                      navigator.clipboard?.writeText(String(f.id))
-                    }
-                    title="Clique para copiar"
-                  >
-                    {f.id}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Fixed fields */}
-        <p className="text-xs font-medium mb-3" style={{ color: "var(--muted)" }}>
-          Campos fixos
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {(
-            [
-              ["DATA_HORARIO", "Data e Horário"],
-              ["PAGAMENTO", "Pagamento"],
-              ["ORIGEM_LEAD", "Origem do Lead"],
-              ["TIPO_CONSULTA", "Tipo de Consulta"],
-              ["CIDADE", "Cidade"],
-              ["OBJETIVO_CLIENTE", "Objetivo do Cliente"],
-              ["CONSULTA_CONFIRMADA_FIELD", "Consulta Confirmada"],
-              ["PROXIMA_CONSULTA", "Próxima Consulta"],
-              ["MOTIVO_PERDA", "Motivo de Perda"],
-            ] as const
-          ).map(([key, label]) => (
-            <Field key={key} label={`${label} (field_id)`}>
+        {/* Conexão */}
+        <Section title="Conexão Kommo">
+          <div className="space-y-4">
+            <Field label="Subdomínio">
               <input
-                type="number"
                 className={inputCls}
-                style={inputStyle}
-                value={config.fieldIds[key]}
-                onChange={(e) =>
-                  setConfig((c) => ({
-                    ...c,
-                    fieldIds: {
-                      ...c.fieldIds,
-                      [key]: parseInt(e.target.value) || 0,
-                    },
-                  }))
-                }
+                style={{ ...inputStyle, opacity: 0.6 }}
+                value={subdomain}
+                readOnly
               />
             </Field>
-          ))}
-        </div>
 
-        {/* Extra fields */}
-        <div
-          className="mt-6 pt-5 border-t"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium" style={{ color: "var(--muted)" }}>
-              Campos adicionais
-            </p>
-            <button
-              onClick={addExtraField}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors hover:opacity-80"
-              style={{
-                background: "var(--green-dim)",
-                borderColor: "var(--green)",
-                color: "var(--green)",
-              }}
-            >
-              <Plus size={11} />
-              Adicionar campo
-            </button>
+            <Field label="API Token (Bearer JWT)">
+              <textarea
+                className={inputCls}
+                style={{ ...inputStyle, resize: "vertical", minHeight: "80px" }}
+                value={apiToken}
+                onChange={(e) => setApiToken(e.target.value)}
+              />
+            </Field>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => testConn()}
+                disabled={connFetching}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                style={{ background: "var(--green)", color: "#000", opacity: connFetching ? 0.7 : 1 }}
+              >
+                <RefreshCw size={13} className={connFetching ? "animate-spin" : ""} />
+                Testar conexão
+              </button>
+              {connData?.success && (
+                <div className="flex items-center gap-2 text-sm" style={{ color: "var(--green)" }}>
+                  <CheckCircle size={14} />
+                  Conectado · {(connData.account as { name?: string }).name}
+                </div>
+              )}
+              {connError && (
+                <div className="flex items-center gap-2 text-sm" style={{ color: "#f85149" }}>
+                  <AlertCircle size={14} />
+                  {(connError as Error).message.slice(0, 80)}
+                </div>
+              )}
+            </div>
           </div>
+        </Section>
+
+        {/* Campos Personalizados */}
+        <Section title="Campos Personalizados">
           <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
-            Adicione campos extras do Kommo para exibir informações adicionais dos leads.
+            Clique em "Descobrir campos" para listar os IDs da sua conta.
           </p>
 
-          {extraFields.length === 0 && (
+          <button
+            onClick={() => loadFields()}
+            disabled={fieldsLoading}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border mb-4"
+            style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--muted)" }}
+          >
+            <Search size={11} className={fieldsLoading ? "animate-spin" : ""} />
+            Descobrir campos da minha conta
+          </button>
+
+          {fields && fields.length > 0 && (
             <div
-              className="rounded-lg border border-dashed px-4 py-6 text-center text-xs"
-              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+              className="rounded-lg border p-3 mb-4 max-h-48 overflow-y-auto"
+              style={{ background: "var(--bg)", borderColor: "var(--border)" }}
             >
-              Nenhum campo adicional configurado. Clique em "Adicionar campo" para começar.
+              <div className="space-y-1">
+                {fields.map((f) => (
+                  <div key={f.id} className="flex items-center justify-between text-xs">
+                    <span style={{ color: "var(--text)" }}>{f.name}</span>
+                    <span
+                      className="font-mono px-1.5 py-0.5 rounded cursor-pointer hover:opacity-80"
+                      style={{ background: "var(--green-dim)", color: "var(--green)" }}
+                      onClick={() => navigator.clipboard?.writeText(String(f.id))}
+                      title="Clique para copiar"
+                    >
+                      {f.id}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          <div className="space-y-2">
-            {extraFields.map((ef) => (
-              <div key={ef.id} className="flex items-center gap-2">
-                <input
-                  className={inputCls}
-                  style={{ ...inputStyle, flex: 1 }}
-                  placeholder="Nome do campo"
-                  value={ef.label}
-                  onChange={(e) =>
-                    updateExtraField(ef.id, { label: e.target.value })
-                  }
-                />
+          <p className="text-xs font-medium mb-3" style={{ color: "var(--muted)" }}>
+            Campos fixos
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {(
+              [
+                ["DATA_HORARIO", "Data e Horário"],
+                ["PAGAMENTO", "Pagamento"],
+                ["ORIGEM_LEAD", "Origem do Lead"],
+                ["TIPO_CONSULTA", "Tipo de Consulta"],
+                ["CIDADE", "Cidade"],
+                ["OBJETIVO_CLIENTE", "Objetivo do Cliente"],
+                ["CONSULTA_CONFIRMADA_FIELD", "Consulta Confirmada"],
+                ["PROXIMA_CONSULTA", "Próxima Consulta"],
+                ["MOTIVO_PERDA", "Motivo de Perda"],
+              ] as const
+            ).map(([key, label]) => (
+              <Field key={key} label={`${label} (field_id)`}>
                 <input
                   type="number"
                   className={inputCls}
-                  style={{ ...inputStyle, width: "140px", flex: "none" }}
-                  placeholder="field_id"
-                  value={ef.fieldId || ""}
-                  onChange={(e) =>
-                    updateExtraField(ef.id, {
-                      fieldId: parseInt(e.target.value) || 0,
-                    })
-                  }
+                  style={inputStyle}
+                  value={currentFieldIds[key] || ""}
+                  onChange={(e) => updateFieldId(key, parseInt(e.target.value) || 0)}
+                />
+              </Field>
+            ))}
+          </div>
+        </Section>
+
+        {/* Nomes das Colunas */}
+        <Section title="Nomes das Colunas">
+          <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+            Personalize o nome de cada etapa do funil exibida no dashboard. Use a chave de config
+            (ex: <span className="font-mono">FUP_1</span>) ou o ID da etapa (ex:{" "}
+            <span className="font-mono">status_106144984</span>).
+          </p>
+
+          <div className="space-y-2">
+            {currentStageLabels.map(([key, value], idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <input
+                  className={inputCls}
+                  style={{ ...inputStyle, flex: "1", minWidth: 0 }}
+                  placeholder="Chave (ex: FUP_1 ou status_123456)"
+                  value={key}
+                  onChange={(e) => updateLabelKey(idx, e.target.value)}
+                />
+                <span style={{ color: "var(--muted)", flexShrink: 0 }}>→</span>
+                <input
+                  className={inputCls}
+                  style={{ ...inputStyle, flex: "1", minWidth: 0 }}
+                  placeholder="Nome exibido"
+                  value={value}
+                  onChange={(e) => updateLabelValue(idx, e.target.value)}
                 />
                 <button
-                  onClick={() => removeExtraField(ef.id)}
-                  className="p-2 rounded-md transition-colors hover:opacity-80 flex-none"
+                  onClick={() => removeLabel(idx)}
+                  className="p-2 rounded-md hover:opacity-80 flex-none"
                   style={{ color: "#f85149" }}
-                  title="Remover campo"
+                  title="Remover"
                 >
                   <Trash2 size={14} />
                 </button>
               </div>
             ))}
           </div>
-        </div>
-      </Section>
 
-      {/* Actions */}
-      {saveError && (
-        <div className="flex items-center gap-2 text-sm" style={{ color: "#f85149" }}>
-          <AlertCircle size={14} />
-          {saveError}
-        </div>
-      )}
-
-      <div className="flex items-center gap-3 pb-4">
-        <button
-          onClick={handleSave}
-          className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium"
-          style={{ background: "var(--green)", color: "#000" }}
-        >
-          {saved ? (
-            <>
-              <CheckCircle size={14} />
-              Salvo!
-            </>
-          ) : (
-            <>
-              <Save size={14} />
-              Salvar configurações
-            </>
+          {currentStageLabels.length === 0 && (
+            <div
+              className="rounded-lg border border-dashed px-4 py-6 text-center text-xs mb-3"
+              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+            >
+              Nenhum nome personalizado configurado.
+            </div>
           )}
-        </button>
-        <button
-          onClick={handleReset}
-          className="px-4 py-2 rounded-lg text-sm font-medium border"
-          style={{
-            background: "transparent",
-            borderColor: "var(--border)",
-            color: "var(--muted)",
-          }}
-        >
-          Resetar padrão
-        </button>
+
+          <button
+            onClick={addLabel}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border mt-3 transition-colors hover:opacity-80"
+            style={{ background: "var(--green-dim)", borderColor: "var(--green)", color: "var(--green)" }}
+          >
+            <Plus size={11} />
+            Adicionar nome
+          </button>
+        </Section>
+
+        {/* Ações */}
+        {saveError && (
+          <div className="flex items-center gap-2 text-sm" style={{ color: "#f85149" }}>
+            <AlertCircle size={14} />
+            {saveError}
+          </div>
+        )}
+
+        <div className="flex items-center gap-3 pb-4">
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium"
+            style={{ background: "var(--green)", color: "#000" }}
+          >
+            {saved ? (
+              <>
+                <CheckCircle size={14} />
+                Salvo!
+              </>
+            ) : (
+              <>
+                <Save size={14} />
+                Salvar configurações
+              </>
+            )}
+          </button>
+        </div>
       </div>
-    </div>
     </div>
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div
-      className="rounded-xl border p-5"
-      style={{ background: "var(--card)", borderColor: "var(--border)" }}
-    >
-      <h2
-        className="font-semibold text-sm mb-4"
-        style={{ color: "var(--text)" }}
-      >
+    <div className="rounded-xl border p-5" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+      <h2 className="font-semibold text-sm mb-4" style={{ color: "var(--text)" }}>
         {title}
       </h2>
       {children}
@@ -411,19 +366,10 @@ function Section({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label
-        className="block text-xs font-medium mb-1.5"
-        style={{ color: "var(--muted)" }}
-      >
+      <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>
         {label}
       </label>
       {children}
