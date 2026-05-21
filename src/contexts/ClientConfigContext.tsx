@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "./AuthContext";
-import type { PipelineConfig, FieldConfig } from "../lib/config";
+import type { PipelineConfig, FieldConfig, PipelineEntry } from "../lib/config";
 
 interface ClientConfigValue {
   subdomain: string;
@@ -10,6 +10,7 @@ interface ClientConfigValue {
   pipelines: PipelineConfig;
   fieldIds: FieldConfig;
   stageLabels: Record<string, string>;
+  pipelineNames: Record<string, PipelineEntry>;
   uazapiUrl: string | null;
   gptmakerWorkspaceId: string | null;
   loading: boolean;
@@ -28,6 +29,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
   const [pipelines, setPipelines] = useState<PipelineConfig>(EMPTY_PIPELINES);
   const [fieldIds, setFieldIds] = useState<FieldConfig>(EMPTY_FIELDS);
   const [stageLabels, setStageLabels] = useState<Record<string, string>>({});
+  const [pipelineNames, setPipelineNames] = useState<Record<string, PipelineEntry>>({});
   const [uazapiUrl, setUazapiUrl] = useState<string | null>(null);
   const [gptmakerWorkspaceId, setGptmakerWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,7 +44,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     supabase
       .from("client_configs")
-      .select("subdomain, client_name, pipelines, field_ids, stage_labels, uazapi_url, gptmaker_workspace_id")
+      .select("subdomain, client_name, pipelines, field_ids, stage_labels, pipeline_names, uazapi_url, gptmaker_workspace_id")
       .eq("user_id", user.id)
       .single()
       .then(({ data, error: err }) => {
@@ -54,6 +56,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
           setPipelines(data.pipelines as PipelineConfig);
           setFieldIds(data.field_ids as FieldConfig);
           setStageLabels((data.stage_labels as Record<string, string>) ?? {});
+          setPipelineNames((data.pipeline_names as Record<string, PipelineEntry>) ?? {});
           setUazapiUrl(data.uazapi_url ?? null);
           setGptmakerWorkspaceId(data.gptmaker_workspace_id ?? null);
         }
@@ -62,7 +65,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
   }, [user?.id]);
 
   return (
-    <ClientConfigContext.Provider value={{ subdomain, clientName, pipelines, fieldIds, stageLabels, uazapiUrl, gptmakerWorkspaceId, loading, error }}>
+    <ClientConfigContext.Provider value={{ subdomain, clientName, pipelines, fieldIds, stageLabels, pipelineNames, uazapiUrl, gptmakerWorkspaceId, loading, error }}>
       {children}
     </ClientConfigContext.Provider>
   );

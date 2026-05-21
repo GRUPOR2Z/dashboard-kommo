@@ -35,6 +35,11 @@ export interface FieldConfig {
   MOTIVO_PERDA: number;
 }
 
+export interface PipelineEntry {
+  name: string;
+  lixeira?: boolean;
+}
+
 export interface ExtraField {
   id: string;
   label: string;
