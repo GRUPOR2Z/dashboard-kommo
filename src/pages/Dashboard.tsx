@@ -307,9 +307,11 @@ export default function Dashboard() {
         qualified.add(event.lead_id);
       }
     }
-    // Leads created in the main funnel since Feb 2026 (enter directly into first status)
-    for (const lead of funilLeads ?? []) {
-      if (lead.created_at >= FEB_2026) totalEntrada.add(lead.id);
+    // Count all leads created since Feb 2026 across every pipeline (including those that already moved out of the main funnel)
+    for (const [, leads] of pipelineLeadsMap) {
+      for (const lead of leads) {
+        if (lead.created_at >= FEB_2026) totalEntrada.add(lead.id);
+      }
     }
 
     const taxaQualificacao =
@@ -335,7 +337,7 @@ export default function Dashboard() {
       totalConvertidos: convertedLeadIds.size,
       taxaConversao,
     };
-  }, [statusEvents, funilLeads, pipelineLeadsMap, pipelineNames, pipelines]);
+  }, [statusEvents, pipelineLeadsMap, pipelineNames, pipelines]);
 
   // ── Sections available for this client's pipeline config ───────────────────
   const availableSections = useMemo(() => {
