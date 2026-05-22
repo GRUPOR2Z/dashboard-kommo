@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Bot, Users, PhoneForwarded, CheckCircle,
   Zap, Loader2, RefreshCw, CalendarRange, AlarmClock,
+  Clock, UserPlus, CreditCard, BarChart2, TrendingUp,
 } from "lucide-react";
-import { fetchAllInteractions } from "../lib/gptmaker";
+import { fetchAllInteractions, fetchWorkspaceReports } from "../lib/gptmaker";
 import { useClientConfig } from "../contexts/ClientConfigContext";
 import type { GptInteraction } from "../lib/gptmaker";
 import type { FilterPeriod } from "../lib/types";
@@ -47,6 +48,23 @@ function interactionInPeriod(
   }
 }
 
+function periodToTimestamps(
+  period: FilterPeriod,
+  customMs?: { from: number; to: number }
+): { from: number; to: number } {
+  const now = Date.now();
+  const todayStart = new Date().setHours(0, 0, 0, 0);
+  const DAY = 86400000;
+  if (period === "custom" && customMs) return customMs;
+  switch (period) {
+    case "hoje":  return { from: todayStart, to: now };
+    case "ontem": return { from: todayStart - DAY, to: todayStart - 1 };
+    case "7d":    return { from: todayStart - 7 * DAY, to: now };
+    case "30d":   return { from: todayStart - 30 * DAY, to: now };
+    default:      return { from: 0, to: now };
+  }
+}
+
 // ── Metrics helpers ────────────────────────────────────────────────────────────
 
 function avgDurationMinutes(interactions: GptInteraction[]): string {
@@ -58,7 +76,7 @@ function avgDurationMinutes(interactions: GptInteraction[]): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}min`;
 }
 
-// ── Follow-up / reactivation buckets ──────────────────────────────────────────
+// ── Follow-up buckets ─────────────────────────────────────────────────────────
 
 const FUP_BUCKETS = [
   { key: "fresh", label: "Sem follow-up", sub: "< 30 min",   color: "#58a6ff" },
@@ -106,13 +124,13 @@ function computeReactivationBuckets(resolved: GptInteraction[]) {
   return counts;
 }
 
-// ── Metric card ───────────────────────────────────────────────────────────────
+// ── Components ────────────────────────────────────────────────────────────────
 
-function MetricCard({ icon: Icon, label, value, sub, color }: {
-  icon: React.ElementType; label: string; value: string | number; sub?: string; color: string;
+function MetricCard({ icon: Icon, label, value, sub, color, wide = false }: {
+  icon: React.ElementType; label: string; value: string | number; sub?: string; color: string; wide?: boolean;
 }) {
   return (
-    <div className="rounded-xl p-4 flex flex-col gap-3"
+    <div className={`rounded-xl p-4 flex flex-col gap-3${wide ? " col-span-2" : ""}`}
       style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium" style={{ color: "var(--muted)" }}>{label}</span>
@@ -128,8 +146,6 @@ function MetricCard({ icon: Icon, label, value, sub, color }: {
     </div>
   );
 }
-
-// ── Status bar ────────────────────────────────────────────────────────────────
 
 function StatusBar({ running, waiting, resolved, total }: {
   running: number; waiting: number; resolved: number; total: number;
@@ -161,6 +177,92 @@ function StatusBar({ running, waiting, resolved, total }: {
   );
 }
 
+function HourlyTimeline({ interactions }: { interactions: GptInteraction[] }) {
+  const { counts, maxCount, top3 } = useMemo(() => {
+    const c = new Array(24).fill(0);
+    for (const i of interactions) {
+      const hour = new Date(i.startAt).getHours();
+      c[hour]++;
+    }
+    const max = Math.max(...c, 1);
+    const sorted = c.map((v, h) => ({ h, v })).sort((a, b) => b.v - a.v);
+    return { counts: c, maxCount: max, top3: sorted.slice(0, 3) };
+  }, [interactions]);
+
+  const peakHour = counts.indexOf(maxCount);
+
+  return (
+    <div className="rounded-xl p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+      <div className="flex items-center gap-2 mb-4">
+        <BarChart2 size={14} style={{ color: "#d29922" }} />
+        <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>Timeline de Consumo</span>
+        <span className="ml-auto text-xs" style={{ color: "var(--muted)" }}>
+          Pico de atendimentos por hora do dia
+        </span>
+      </div>
+
+      {/* Top 3 peak hours */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        {top3.map(({ h, v }, idx) => (
+          <div key={h} className="rounded-lg p-3 text-center"
+            style={{
+              background: idx === 0 ? "#d2992220" : "var(--bg)",
+              border: `1px solid ${idx === 0 ? "#d29922" : "var(--border)"}`,
+            }}>
+            {idx === 0 && (
+              <p className="text-xs font-medium mb-1" style={{ color: "#d29922" }}>☀ Pico</p>
+            )}
+            {idx === 1 && (
+              <p className="text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>☀ 2°</p>
+            )}
+            {idx === 2 && (
+              <p className="text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>↗ 3°</p>
+            )}
+            <p className="text-xl font-bold" style={{ color: idx === 0 ? "#d29922" : "var(--text)" }}>
+              {String(h).padStart(2, "0")}:00
+            </p>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>{v} atendimento{v !== 1 ? "s" : ""}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Bar chart */}
+      <div className="flex items-end gap-0.5" style={{ height: "64px" }}>
+        {counts.map((count, hour) => {
+          const pct = maxCount > 0 ? (count / maxCount) : 0;
+          const isPeak = hour === peakHour && count > 0;
+          const isTop3 = top3.slice(0, 3).some((t) => t.h === hour && t.v > 0);
+          return (
+            <div key={hour} className="flex-1 flex flex-col justify-end relative group"
+              style={{ height: "100%" }}
+              title={`${String(hour).padStart(2, "0")}h: ${count} atendimentos`}>
+              <div className="w-full rounded-t transition-all duration-300"
+                style={{
+                  height: count > 0 ? `${Math.max(pct * 100, 5)}%` : "2px",
+                  background: isPeak ? "#d29922" : isTop3 ? "#a371f755" : "var(--border)",
+                  minHeight: "2px",
+                }}
+              />
+              {/* Hover tooltip label */}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1 py-0.5 rounded text-xs whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 z-10"
+                style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--text)" }}>
+                {count}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* X-axis */}
+      <div className="flex justify-between mt-1.5 text-xs" style={{ color: "var(--muted)" }}>
+        {[0, 6, 12, 18, 23].map((h) => (
+          <span key={h}>{String(h).padStart(2, "0")}h</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardIA() {
@@ -184,6 +286,16 @@ export default function DashboardIA() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Credits / reports (optional — gracefully ignored if endpoint unavailable)
+  const { from: rFrom, to: rTo } = periodToTimestamps(period, customMs);
+  const { data: creditsReport } = useQuery({
+    queryKey: ["gptmaker-reports", gptmakerWorkspaceId, period, rFrom, rTo],
+    queryFn: () => fetchWorkspaceReports(gptmakerWorkspaceId!, rFrom, rTo),
+    enabled: !!gptmakerWorkspaceId && !configLoading,
+    staleTime: 5 * 60 * 1000,
+    retry: 0,
+  });
+
   const filteredInteractions = useMemo(() => {
     const todayStart = new Date().setHours(0, 0, 0, 0);
     const now = Date.now();
@@ -199,13 +311,62 @@ export default function DashboardIA() {
     const resolved    = filteredInteractions.filter((i) => i.status === "RESOLVED").length;
     const transferred = filteredInteractions.filter((i) => i.transferAt !== null).length;
     const autonomous  = filteredInteractions.filter((i) => i.status === "RESOLVED" && !i.transferAt).length;
+    const newContacts = new Set(filteredInteractions.map((i) => i.contactId)).size;
+
+    // Credits from interaction objects (if API returns them)
+    const hasCreditsInData = filteredInteractions.some((i) => (i.credits ?? 0) > 0);
+    const totalCreditsLocal = hasCreditsInData
+      ? filteredInteractions.reduce((s, i) => s + (i.credits ?? 0), 0)
+      : null;
+    const avgCreditsLocal = (hasCreditsInData && total > 0)
+      ? Math.round((totalCreditsLocal! / total) * 10) / 10
+      : null;
+
+    // Message counts from interaction objects
+    const hasMsgData = filteredInteractions.some((i) => (i.messages ?? 0) > 0);
+    const msgCounts = hasMsgData ? filteredInteractions.map((i) => i.messages ?? 0) : [];
+    const avgMessages = msgCounts.length > 0
+      ? Math.round(msgCounts.reduce((a, b) => a + b, 0) / msgCounts.length * 10) / 10
+      : null;
+
     const transferRate   = total   ? Math.round((transferred / total)   * 100) : 0;
     const resolveRate    = total   ? Math.round((resolved   / total)   * 100) : 0;
     const efficiencyRate = resolved ? Math.round((autonomous / resolved) * 100) : 0;
     const avgDuration    = avgDurationMinutes(filteredInteractions);
-    return { total, running, waiting, resolved, transferred, autonomous,
-             transferRate, resolveRate, efficiencyRate, avgDuration };
+
+    return {
+      total, running, waiting, resolved, transferred, autonomous, newContacts,
+      totalCreditsLocal, avgCreditsLocal, avgMessages,
+      transferRate, resolveRate, efficiencyRate, avgDuration,
+    };
   }, [filteredInteractions]);
+
+  // Credits from reports endpoint (preferred over interaction-level data)
+  const creditsDisplay = useMemo(() => {
+    if (!creditsReport) return metrics.totalCreditsLocal !== null ? {
+      total: metrics.totalCreditsLocal!,
+      avg: metrics.avgCreditsLocal ?? 0,
+      cost: null,
+    } : null;
+
+    const total = (creditsReport.totalCredits ?? creditsReport.credits ?? null);
+    const cost  = (creditsReport.totalCost ?? creditsReport.cost ?? null);
+    const avg   = (total !== null && metrics.total > 0) ? Math.round((total / metrics.total) * 10) / 10 : null;
+    if (total === null && cost === null) return null;
+    return {
+      total: typeof total === "number" ? total : null,
+      avg: typeof avg === "number" ? avg : null,
+      cost: typeof cost === "number" ? cost : null,
+    };
+  }, [creditsReport, metrics]);
+
+  const avgInteractions = useMemo(() => {
+    if (metrics.avgMessages !== null) return metrics.avgMessages;
+    if (creditsReport?.interactions && metrics.total > 0) {
+      return Math.round(((creditsReport.interactions as number) / metrics.total) * 10) / 10;
+    }
+    return null;
+  }, [metrics.avgMessages, creditsReport, metrics.total]);
 
   const followUpBuckets = useMemo(() => {
     const waiting  = filteredInteractions.filter((i) => i.status === "WAITING");
@@ -213,8 +374,8 @@ export default function DashboardIA() {
     const reactivated = resolved.filter((i) => (i.resolvedAt! - i.startAt) > MIN30).length;
     const reactivationRate = resolved.length ? Math.round((reactivated / resolved.length) * 100) : 0;
     return {
-      waiting:      { counts: computeFollowUpBuckets(waiting),            total: waiting.length },
-      reactivation: { counts: computeReactivationBuckets(resolved),       total: resolved.length },
+      waiting:      { counts: computeFollowUpBuckets(waiting),      total: waiting.length },
+      reactivation: { counts: computeReactivationBuckets(resolved), total: resolved.length },
       reactivated,
       reactivationRate,
     };
@@ -298,18 +459,40 @@ export default function DashboardIA() {
           </div>
         )}
 
-        {/* Main metrics */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-          <MetricCard icon={Users}         label="Total de atendimentos" value={metrics.total}           color="#58a6ff" />
-          <MetricCard icon={PhoneForwarded} label="Transferências"        value={metrics.transferred}
-            sub={`${metrics.transferRate}% do total`}                                                    color="#f0883e" />
-          <MetricCard icon={CheckCircle}   label="Resolvidos"             value={metrics.resolved}
-            sub={`${metrics.resolveRate}% do total`}                                                     color="#3fb950" />
+        {/* Row 1 — main metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <MetricCard icon={Users}      label="Total de Atendimentos" value={metrics.total}        color="#58a6ff" />
+          <MetricCard icon={UserPlus}   label="Novos Contatos"        value={metrics.newContacts}   color="#a371f7"
+            sub="contatos únicos no período" />
+          <MetricCard icon={CheckCircle} label="Resolvidos"           value={metrics.resolved}      color="#3fb950"
+            sub={`${metrics.resolveRate}% do total`} />
+          <MetricCard icon={PhoneForwarded} label="Transferências"    value={metrics.transferred}   color="#f0883e"
+            sub={`${metrics.transferRate}% do total`} />
+        </div>
 
+        {/* Row 2 — secondary metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <MetricCard icon={Clock} label="Tempo Médio de Resolução" value={metrics.avgDuration} color="#58a6ff"
+            sub={`${metrics.resolved} atendimentos resolvidos`} />
+          <MetricCard icon={TrendingUp} label="Eficiência da IA" value={`${metrics.efficiencyRate}%`} color="#3fb950"
+            sub={`${metrics.autonomous} resolvidos sem humano`} />
+          {creditsDisplay?.total !== null && creditsDisplay !== null && (
+            <MetricCard icon={CreditCard} label="Créditos Gastos" value={creditsDisplay.total!} color="#d29922"
+              sub={creditsDisplay.avg !== null ? `média ${creditsDisplay.avg} por atendimento` : undefined} />
+          )}
+          {avgInteractions !== null && (
+            <MetricCard icon={BarChart2} label="Média de Interações" value={avgInteractions} color="#a371f7"
+              sub="interações por atendimento" />
+          )}
         </div>
 
         {/* Status bar */}
         <StatusBar running={metrics.running} waiting={metrics.waiting} resolved={metrics.resolved} total={metrics.total} />
+
+        {/* Timeline de Consumo */}
+        {filteredInteractions.length > 0 && (
+          <HourlyTimeline interactions={filteredInteractions} />
+        )}
 
         {/* Follow-ups da IA */}
         {(followUpBuckets.waiting.total > 0 || followUpBuckets.reactivation.total > 0) && (
@@ -331,7 +514,6 @@ export default function DashboardIA() {
               </span>
             </div>
 
-            {/* Em espera */}
             {followUpBuckets.waiting.total > 0 && (
               <div className="p-4 space-y-3">
                 <p className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>
@@ -359,7 +541,6 @@ export default function DashboardIA() {
               </div>
             )}
 
-            {/* Reativados */}
             {followUpBuckets.reactivation.total > 0 && (
               <div className="p-4 space-y-3 border-t" style={{ borderColor: "var(--border)" }}>
                 <div className="flex items-center justify-between mb-2">
@@ -395,13 +576,13 @@ export default function DashboardIA() {
 
             <div className="px-4 py-2 border-t" style={{ borderColor: "var(--border)" }}>
               <p className="text-xs" style={{ color: "var(--muted)" }}>
-                Estimativa baseada no tempo desde o início da interação. Reativação = resolvidos após 30min (provável resposta pós follow-up).
+                Estimativa baseada no tempo desde o início da interação. Reativação = resolvidos após 30min.
               </p>
             </div>
           </div>
         )}
 
-        {/* Active conversations */}
+        {/* Atendimentos ativos */}
         <div className="rounded-xl" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
           <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "var(--border)" }}>
             <Zap size={14} style={{ color: "var(--green)" }} />

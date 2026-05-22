@@ -34,6 +34,10 @@ export interface GptInteraction {
   transferAt: number | null;
   resolvedAt: number | null;
   protocol: string;
+  // Optional fields returned by some workspace configs
+  credits?: number;
+  messages?: number;
+  channelId?: string;
 }
 
 export interface GptInteractionsResponse {
@@ -44,6 +48,32 @@ export interface GptInteractionsResponse {
   pageSize: number;
 }
 
+// ── Credits / Reports ─────────────────────────────────────────────────────────
+export interface GptCreditsReport {
+  totalCredits?: number;
+  credits?: number;
+  totalCost?: number;
+  cost?: number;
+  contacts?: number;
+  interactions?: number;
+  creditsPerModel?: Array<{ model: string; credits: number; interactions: number }>;
+  creditsPerChannel?: Array<{ channel: string; channelId: string; credits: number }>;
+  // catch-all for different API versions
+  [key: string]: unknown;
+}
+
+export async function fetchWorkspaceReports(
+  workspaceId: string,
+  from?: number,
+  to?: number
+): Promise<GptCreditsReport> {
+  const params: Record<string, string | number> = {};
+  if (from !== undefined) params.from = from;
+  if (to !== undefined) params.to = to;
+  return gptGet<GptCreditsReport>(`/v2/workspace/${workspaceId}/reports`, params);
+}
+
+// ── Interactions ──────────────────────────────────────────────────────────────
 export async function fetchInteractions(
   workspaceId: string,
   page = 1,
