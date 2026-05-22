@@ -30,6 +30,7 @@ import {
   fetchNotesSample,
   fetchPipelines,
   leadInPeriod,
+  periodTimestamps,
 } from "../lib/kommo-api";
 import { formatBizTime, detectClosure, firstResponseMinutes } from "../lib/business-hours";
 import { computeKPIs, computeFollowUpRate, FUNIL_STAGES, CLIENTES_PLANOS } from "../lib/kpis";
@@ -293,29 +294,45 @@ export default function Dashboard() {
 
   const loading = configLoading || funilLoading || clientesLoading || statusLoading || extraPipelineQueries.some((q) => q.isLoading);
 
-  // ── AI Qualification metrics (since Feb 2026) ──────────────────────────────
+  // ── AI Qualification metrics (since Feb 2026, respects period filter) ────────
   const aiQualifications = useMemo(() => {
     if (!statusEvents || !pipelines.LEADS_ENTRADA || !pipelines.CONTATO_INICIAL) return null;
 
-    const totalEntrada = new Set<number>();
+    // Effective window: never before Feb 2026 (IA start), respects period filter
+    let effectiveFrom = FEB_2026;
+    let effectiveTo = Math.floor(Date.now() / 1000);
+    if (period !== "todos") {
+      const { from, to } = periodTimestamps(period, customDates);
+      effectiveFrom = Math.max(FEB_2026, from);
+      effectiveTo = to;
+    }
+
+    // totalAtendidos = leads that entered "Pré-atendimento IA" in the window
+    const totalAtendidos = new Set<number>();
     const qualified = new Set<number>();
 
     for (const event of statusEvents) {
-      if (event.created_at < FEB_2026) continue;
-      if (event.status_after === pipelines.LEADS_ENTRADA) totalEntrada.add(event.lead_id);
+      if (event.created_at < effectiveFrom || event.created_at > effectiveTo) continue;
+      if (event.status_after === pipelines.LEADS_ENTRADA) totalAtendidos.add(event.lead_id);
       if (event.status_before === pipelines.LEADS_ENTRADA && event.status_after === pipelines.CONTATO_INICIAL) {
         qualified.add(event.lead_id);
       }
     }
-    // Count all leads created since Feb 2026 across every pipeline (including those that already moved out of the main funnel)
+    // Leads currently sitting in LEADS_ENTRADA created within the window (no status-change event yet)
     for (const [, leads] of pipelineLeadsMap) {
       for (const lead of leads) {
-        if (lead.created_at >= FEB_2026) totalEntrada.add(lead.id);
+        if (
+          lead.status_id === pipelines.LEADS_ENTRADA &&
+          lead.created_at >= effectiveFrom &&
+          lead.created_at <= effectiveTo
+        ) {
+          totalAtendidos.add(lead.id);
+        }
       }
     }
 
     const taxaQualificacao =
-      totalEntrada.size > 0 ? Math.round((qualified.size / totalEntrada.size) * 1000) / 10 : 0;
+      totalAtendidos.size > 0 ? Math.round((qualified.size / totalAtendidos.size) * 1000) / 10 : 0;
 
     // Conversion: qualified leads currently in any non-main, non-lixeira pipeline
     const convertedLeadIds = new Set<number>();
@@ -331,13 +348,13 @@ export default function Dashboard() {
       qualified.size > 0 ? Math.round((convertedLeadIds.size / qualified.size) * 1000) / 10 : 0;
 
     return {
-      totalEntrada: totalEntrada.size,
+      totalAtendidos: totalAtendidos.size,
       totalQualificados: qualified.size,
       taxaQualificacao,
       totalConvertidos: convertedLeadIds.size,
       taxaConversao,
     };
-  }, [statusEvents, pipelineLeadsMap, pipelineNames, pipelines]);
+  }, [statusEvents, pipelineLeadsMap, pipelineNames, pipelines, period, customDates]);
 
   // ── Sections available for this client's pipeline config ───────────────────
   const availableSections = useMemo(() => {
@@ -777,6 +794,9 @@ export default function Dashboard() {
 
   function renderQualificacaoIA() {
     const q = aiQualifications;
+    const periodoLabel = period === "todos"
+      ? "desde fev/2026"
+      : FILTER_OPTIONS.find((o) => o.value === period)?.label.toLowerCase() ?? period;
     return (
       <div
         className="rounded-xl border p-5"
@@ -798,16 +818,18 @@ export default function Dashboard() {
               Qualificação por IA
             </h2>
           </div>
-          <span className="text-xs" style={{ color: "var(--muted)" }}>Desde fev/2026 · todos os leads recebidos</span>
+          <span className="text-xs" style={{ color: "var(--muted)" }}>
+            Pré-atendimento IA → Conversa em andamento · {periodoLabel}
+          </span>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          {/* Taxa de Qualificação */}
+          {/* Atendidos pela IA */}
           <div className="rounded-lg border p-4" style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 size={12} style={{ color: "#a371f7" }} />
+              <Activity size={12} style={{ color: "#a371f7" }} />
               <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-                Qualificados pela IA
+                Atendidos pela IA
               </span>
             </div>
             {loading ? (
@@ -815,15 +837,19 @@ export default function Dashboard() {
             ) : (
               <>
                 <div className="text-3xl font-bold" style={{ color: "#a371f7" }}>
-                  {q?.totalQualificados ?? 0}
+                  {q?.totalAtendidos ?? 0}
                 </div>
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-                  de {q?.totalEntrada ?? 0} leads recebidos
+                  leads recebidos no Pré-atendimento IA
                 </p>
                 <div className="mt-3">
                   <div className="flex justify-between text-xs mb-1">
-                    <span style={{ color: "var(--muted)" }}>Taxa de qualificação</span>
-                    <span style={{ color: "#a371f7" }} className="font-bold">{q?.taxaQualificacao ?? 0}%</span>
+                    <span style={{ color: "var(--muted)" }}>
+                      {q?.totalQualificados ?? 0} qualificados
+                    </span>
+                    <span style={{ color: "#a371f7" }} className="font-bold">
+                      {q?.taxaQualificacao ?? 0}%
+                    </span>
                   </div>
                   <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
                     <div
@@ -831,12 +857,15 @@ export default function Dashboard() {
                       style={{ width: `${Math.min(q?.taxaQualificacao ?? 0, 100)}%`, background: "#a371f7" }}
                     />
                   </div>
+                  <p className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
+                    taxa de qualificação
+                  </p>
                 </div>
               </>
             )}
           </div>
 
-          {/* Taxa de Conversão */}
+          {/* Viraram Clientes */}
           <div className="rounded-lg border p-4" style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
             <div className="flex items-center gap-2 mb-2">
               <TrendingUp size={12} style={{ color: "var(--green)" }} />
