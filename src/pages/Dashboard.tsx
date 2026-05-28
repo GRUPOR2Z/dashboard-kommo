@@ -104,6 +104,9 @@ export default function Dashboard() {
   const [activeFunilTab, setActiveFunilTab] = useState<"vendas" | "negocia">("vendas");
   const [activeFunilPipelineId, setActiveFunilPipelineId] = useState<number | null>(null);
   const [activePipelineId, setActivePipelineId] = useState<number | null>(null);
+  const [activeStageDrawer, setActiveStageDrawer] = useState<{
+    key: string; label: string; statusId: number; pipelineId: number | null;
+  } | null>(null);
   const { subdomain, clientName, pipelines, fieldIds, stageLabels, pipelineNames, loading: configLoading } = useClientConfig();
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -281,6 +284,7 @@ export default function Dashboard() {
     return Object.entries(combined)
       .map(([configKey, { statusId, count }]) => ({
         key: configKey,
+        statusId,
         // status_XXXXXXXX in stage_labels takes priority, then config-key label, then key name
         label:
           stageLabels[`status_${statusId}`] ??
@@ -512,7 +516,22 @@ export default function Dashboard() {
     [clientesLeads, pipelines]
   );
 
+  const stageDrawerLeads = useMemo(() => {
+    if (!activeStageDrawer) return [];
+    const { statusId, pipelineId } = activeStageDrawer;
+    const candidates: KommoLead[] = [];
+    if (pipelineId !== null) {
+      candidates.push(...(pipelineLeadsMap.get(pipelineId) ?? []));
+    } else {
+      for (const [, leads] of pipelineLeadsMap) candidates.push(...leads);
+    }
+    return candidates
+      .filter((l) => l.status_id === statusId)
+      .filter((l) => leadInPeriod(l, period, customDates));
+  }, [activeStageDrawer, pipelineLeadsMap, period, customDates]);
+
   function toggleDrawer(d: ActiveDrawer) {
+    setActiveStageDrawer(null);
     setActiveDrawer((prev) => (prev === d ? null : d));
   }
 
@@ -1078,12 +1097,24 @@ export default function Dashboard() {
                   ))}
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {topStagesData.map((item) => {
                     const maxVal = topStagesData[0]?.value ?? 1;
                     const pct = Math.round((item.value / Math.max(maxVal, 1)) * 100);
+                    const isActive = activeStageDrawer?.key === item.key && activeStageDrawer?.pipelineId === null;
                     return (
-                      <div key={item.key} className="flex items-center gap-3">
+                      <button
+                        key={item.key}
+                        onClick={() => {
+                          setActiveDrawer(null);
+                          setActiveStageDrawer(isActive ? null : { key: item.key, label: item.label, statusId: item.statusId, pipelineId: null });
+                        }}
+                        className="flex items-center gap-3 w-full text-left rounded-lg px-2 py-1 transition-colors"
+                        style={{
+                          background: isActive ? "#a371f718" : "transparent",
+                          outline: isActive ? "1px solid #a371f740" : "none",
+                        }}
+                      >
                         <div className="text-xs w-48 shrink-0 truncate" style={{ color: "var(--muted)" }}>
                           {item.label}
                         </div>
@@ -1096,7 +1127,7 @@ export default function Dashboard() {
                         <span className="text-xs font-bold w-8 text-right shrink-0" style={{ color: "#a371f7" }}>
                           {item.value}
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -1169,24 +1200,56 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {activeFunilItems.map((item) => {
                   const pct = Math.round((item.value / Math.max(activeFunilTotal, 1)) * 100);
+                  // Derive statusId: from item directly, from pipelines config key, or from "status_NNN" key
+                  const sid: number | undefined =
+                    (item as { statusId?: number }).statusId ??
+                    (() => {
+                      const fromConfig = (pipelines as unknown as Record<string, unknown>)[item.key];
+                      if (typeof fromConfig === "number" && fromConfig > 0) return fromConfig;
+                      if (item.key.startsWith("status_")) {
+                        const n = parseInt(item.key.replace("status_", ""), 10);
+                        return isNaN(n) ? undefined : n;
+                      }
+                      return undefined;
+                    })();
+                  const pid = hasPipelineNames
+                    ? (activeFunilPipelineId ?? pipelines.FUNIL_ID)
+                    : activeFunilTab === "vendas"
+                    ? pipelines.FUNIL_ID
+                    : pipelines.CLIENTES_ID;
+                  const isActive = activeStageDrawer?.key === item.key && activeStageDrawer?.pipelineId === pid;
+                  const color = item.color ?? "var(--green)";
                   return (
-                    <div key={item.key} className="flex items-center gap-3">
+                    <button
+                      key={item.key}
+                      onClick={() => {
+                        if (!sid) return;
+                        setActiveDrawer(null);
+                        setActiveStageDrawer(isActive ? null : { key: item.key, label: item.label, statusId: sid, pipelineId: pid });
+                      }}
+                      className="flex items-center gap-3 w-full text-left rounded-lg px-2 py-1 transition-colors"
+                      style={{
+                        background: isActive ? color + "18" : "transparent",
+                        cursor: sid ? "pointer" : "default",
+                        outline: isActive ? `1px solid ${color}40` : "none",
+                      }}
+                    >
                       <div className="text-xs w-44 shrink-0 truncate" style={{ color: "var(--muted)" }}>
                         {item.label}
                       </div>
                       <div className="flex-1 h-5 rounded overflow-hidden" style={{ background: "var(--border)" }}>
                         <div
                           className="h-full rounded transition-all duration-500"
-                          style={{ width: `${Math.max(pct, 2)}%`, background: item.color ?? "var(--green)", opacity: 0.85 }}
+                          style={{ width: `${Math.max(pct, 2)}%`, background: color, opacity: 0.85 }}
                         />
                       </div>
-                      <span className="text-xs font-bold w-8 text-right shrink-0" style={{ color: item.color ?? "var(--green)" }}>
+                      <span className="text-xs font-bold w-8 text-right shrink-0" style={{ color }}>
                         {item.value}
                       </span>
-                    </div>
+                    </button>
                   );
                 })}
                 {activeFunilItems.length === 0 && (
@@ -1669,6 +1732,15 @@ export default function Dashboard() {
           title="Clientes — Plano Anual"
           leads={anualLeads}
           onClose={() => setActiveDrawer(null)}
+          subdomain={subdomain}
+        />
+      )}
+
+      {activeStageDrawer && (
+        <LeadDrawer
+          title={`${activeStageDrawer.label} — ${FILTER_OPTIONS.find((f) => f.value === period)?.label ?? period}`}
+          leads={stageDrawerLeads}
+          onClose={() => setActiveStageDrawer(null)}
           subdomain={subdomain}
         />
       )}

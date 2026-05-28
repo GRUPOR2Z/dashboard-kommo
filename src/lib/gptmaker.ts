@@ -87,17 +87,16 @@ export async function fetchInteractions(
 
 export async function fetchAllInteractions(workspaceId: string): Promise<GptInteraction[]> {
   const first = await fetchInteractions(workspaceId, 1, 100);
+  if (!first?.data || !Array.isArray(first.data)) return [];
   const all = [...first.data];
-  const totalPages = first.pages;
-
+  const totalPages = first.pages ?? 1;
   if (totalPages > 1) {
     const rest = await Promise.all(
       Array.from({ length: totalPages - 1 }, (_, i) =>
-        fetchInteractions(workspaceId, i + 2, 100).then((r) => r.data)
+        fetchInteractions(workspaceId, i + 2, 100).then((r) => r.data ?? [])
       )
     );
     all.push(...rest.flat());
   }
-
   return all;
 }
