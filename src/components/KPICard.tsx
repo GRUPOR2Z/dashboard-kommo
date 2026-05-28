@@ -27,42 +27,51 @@ export default function KPICard({
   return (
     <button
       onClick={onClick}
-      className="text-left w-full rounded-xl border p-5 transition-all"
+      className="text-left w-full rounded-xl p-5 transition-all"
       style={{
-        background: active ? "rgba(0,182,122,0.08)" : "var(--card)",
-        borderColor: active ? color : "var(--border)",
+        background: "var(--card)",
+        border: `1px solid ${active ? color : "var(--border)"}`,
+        borderLeft: `3px solid ${active ? color : "transparent"}`,
         cursor: onClick ? "pointer" : "default",
         outline: "none",
+        boxShadow: active ? `0 0 0 1px ${color}30` : "none",
       }}
     >
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+      <div className="flex items-center justify-between mb-4">
+        <span
+          className="text-xs font-semibold uppercase tracking-widest"
+          style={{ color: "var(--muted)" }}
+        >
           {title}
         </span>
-        <span
-          className="w-8 h-8 flex items-center justify-center rounded-lg"
-          style={{ background: `${color}22`, color }}
-        >
+        <span style={{ color: active ? color : "var(--muted)", opacity: active ? 1 : 0.5 }}>
           {icon}
         </span>
       </div>
 
       {loading ? (
-        <div className="h-8 w-20 rounded animate-pulse" style={{ background: "var(--border)" }} />
+        <>
+          <div className="h-10 w-20 rounded-lg animate-pulse mb-2" style={{ background: "var(--border)" }} />
+          <div className="h-3 w-28 rounded animate-pulse" style={{ background: "var(--border)" }} />
+        </>
       ) : (
-        <div className="flex items-end gap-2">
-          <span className="text-3xl font-bold tracking-tight" style={{ color: "var(--text)" }}>
-            {value}
-          </span>
-          {trend === "up" && <TrendingUp size={16} className="mb-1" style={{ color: "var(--green)" }} />}
-          {trend === "down" && <TrendingDown size={16} className="mb-1" style={{ color: "#f85149" }} />}
-        </div>
-      )}
-
-      {subtitle && (
-        <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
-          {subtitle}
-        </p>
+        <>
+          <div className="flex items-baseline gap-2">
+            <span
+              className="text-4xl font-bold tracking-tight"
+              style={{ color: active ? color : "var(--text)" }}
+            >
+              {value}
+            </span>
+            {trend === "up" && <TrendingUp size={13} style={{ color: "var(--green)" }} />}
+            {trend === "down" && <TrendingDown size={13} style={{ color: "#f85149" }} />}
+          </div>
+          {subtitle && (
+            <p className="mt-2 text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+              {subtitle}
+            </p>
+          )}
+        </>
       )}
     </button>
   );

@@ -65,6 +65,18 @@ const FILTER_OPTIONS: { label: string; value: FilterPeriod }[] = [
 ];
 
 const DEFAULT_SECTION_ORDER = ["followup", "qualificacao-ia", "consultas", "etapas-funil", "visao-geral", "secoes", "atendimento"];
+
+function periodLabel(p: FilterPeriod): string {
+  switch (p) {
+    case "hoje":   return "HOJE";
+    case "ontem":  return "ONTEM";
+    case "7d":     return "ESTA SEMANA";
+    case "30d":    return "ÚLTIMOS 30 DIAS";
+    case "todos":  return "TODO O PERÍODO";
+    case "custom": return "PERÍODO PERSONALIZADO";
+    default:       return p;
+  }
+}
 const FEB_2026 = Math.floor(new Date(2026, 1, 1).getTime() / 1000);
 const SECTION_ORDER_KEY = "kommo_section_order";
 
@@ -695,12 +707,12 @@ export default function Dashboard() {
               style={{ cursor: "grab", touchAction: "none" }}
               title="Arrastar para reordenar"
             >
-              <GripVertical size={14} style={{ color: "var(--muted)", opacity: 0.5 }} />
+              <GripVertical size={14} style={{ color: "var(--muted)", opacity: 0.4 }} />
             </div>
-            <RotateCcw size={14} style={{ color: "#3fb950" }} />
-            <h2 className="font-semibold text-sm" style={{ color: "var(--text)" }}>
+            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
               Follow-up
-            </h2>
+              <span className="font-normal opacity-60"> · {periodLabel(period)}</span>
+            </span>
           </div>
           <div className="ml-auto flex items-center gap-3">
             {fupRate && (
@@ -778,7 +790,7 @@ export default function Dashboard() {
                 Pendentes
               </span>
             </div>
-            <div className="text-3xl font-bold" style={{ color: "var(--text)" }}>
+            <div className="text-4xl font-bold tracking-tight" style={{ color: "var(--text)" }}>
               {loading ? "..." : kpis?.fupLeads.length ?? 0}
             </div>
             <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
@@ -812,7 +824,7 @@ export default function Dashboard() {
                 Reativados
               </span>
             </div>
-            <div className="text-3xl font-bold" style={{ color: "#3fb950" }}>
+            <div className="text-4xl font-bold tracking-tight" style={{ color: "#3fb950" }}>
               {loading ? "..." : fupRate?.fupReativados ?? 0}
             </div>
             <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
@@ -858,7 +870,7 @@ export default function Dashboard() {
                 Ignorados
               </span>
             </div>
-            <div className="text-3xl font-bold" style={{ color: "#f85149" }}>
+            <div className="text-4xl font-bold tracking-tight" style={{ color: "#f85149" }}>
               {loading ? "..." : fupRate?.fupIgnorados ?? 0}
             </div>
             <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
@@ -913,10 +925,10 @@ export default function Dashboard() {
             >
               <GripVertical size={14} style={{ color: "var(--muted)", opacity: 0.5 }} />
             </div>
-            <Activity size={14} style={{ color: "#a371f7" }} />
-            <h2 className="font-semibold text-sm" style={{ color: "var(--text)" }}>
+            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
               Qualificação por IA
-            </h2>
+              <span className="font-normal opacity-60"> · {periodLabel(period)}</span>
+            </span>
           </div>
           <span className="text-xs" style={{ color: "var(--muted)" }}>
             Pré-atendimento IA → Conversa em andamento · {periodoLabel}
@@ -936,7 +948,7 @@ export default function Dashboard() {
               <div className="h-9 rounded animate-pulse" style={{ background: "var(--border)" }} />
             ) : (
               <>
-                <div className="text-3xl font-bold" style={{ color: "#a371f7" }}>
+                <div className="text-4xl font-bold tracking-tight" style={{ color: "#a371f7" }}>
                   {q?.totalAtendidos ?? 0}
                 </div>
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
@@ -977,7 +989,7 @@ export default function Dashboard() {
               <div className="h-9 rounded animate-pulse" style={{ background: "var(--border)" }} />
             ) : (
               <>
-                <div className="text-3xl font-bold" style={{ color: "var(--green)" }}>
+                <div className="text-4xl font-bold tracking-tight" style={{ color: "var(--green)" }}>
                   {q?.totalConvertidos ?? 0}
                 </div>
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
@@ -1019,9 +1031,10 @@ export default function Dashboard() {
           >
             <GripVertical size={14} style={{ color: "var(--muted)", opacity: 0.5 }} />
           </div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
             Consultas
-          </h2>
+            <span className="font-normal opacity-60"> · {periodLabel(period)}</span>
+          </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           <KPICard
@@ -1099,9 +1112,10 @@ export default function Dashboard() {
             <GripVertical size={14} style={{ color: "var(--muted)", opacity: 0.5 }} />
           </div>
           <BarChart3 size={14} style={{ color: "var(--green)" }} />
-          <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
             Etapas do Funil
-          </h2>
+            <span className="font-normal opacity-60"> · {periodLabel(period)}</span>
+          </span>
           {hasPipelineNames && (
             <div className="ml-auto flex flex-wrap gap-1">
               {Object.entries(pipelineNames)
@@ -1165,9 +1179,10 @@ export default function Dashboard() {
           >
             <GripVertical size={14} style={{ color: "var(--muted)", opacity: 0.5 }} />
           </div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
             Visão Geral
-          </h2>
+            <span className="font-normal opacity-60"> · {periodLabel(period)}</span>
+          </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <KPICard
@@ -1225,9 +1240,10 @@ export default function Dashboard() {
           >
             <GripVertical size={14} style={{ color: "var(--muted)", opacity: 0.5 }} />
           </div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
             Análises
-          </h2>
+            <span className="font-normal opacity-60"> · {periodLabel(period)}</span>
+          </span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {topStagesData.length > 0 && (
@@ -1536,10 +1552,9 @@ export default function Dashboard() {
           >
             <GripVertical size={14} style={{ color: "var(--muted)", opacity: 0.5 }} />
           </div>
-          <Clock size={14} style={{ color: "#58a6ff" }} />
-          <h2 className="font-semibold text-sm" style={{ color: "var(--text)" }}>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--muted)" }}>
             Tempo de Atendimento
-          </h2>
+          </span>
           <span className="ml-auto text-xs" style={{ color: "var(--muted)" }}>
             Seg–Sex · 08h–17h30 · {responseTimeMetrics?.totalSampled ?? "—"} leads recentes
           </span>
@@ -1561,7 +1576,7 @@ export default function Dashboard() {
               <div className="h-9 rounded animate-pulse" style={{ background: "var(--border)" }} />
             ) : (
               <>
-                <div className="text-3xl font-bold" style={{ color: "#58a6ff" }}>
+                <div className="text-4xl font-bold tracking-tight" style={{ color: "#58a6ff" }}>
                   {responseTimeMetrics?.avgDisplay ?? "—"}
                 </div>
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
@@ -1588,7 +1603,7 @@ export default function Dashboard() {
               <div className="h-9 rounded animate-pulse" style={{ background: "var(--border)" }} />
             ) : (
               <>
-                <div className="text-3xl font-bold" style={{ color: "#3fb950" }}>
+                <div className="text-4xl font-bold tracking-tight" style={{ color: "#3fb950" }}>
                   {responseTimeMetrics?.closedCount ?? "—"}
                 </div>
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
@@ -1613,7 +1628,7 @@ export default function Dashboard() {
               <div className="h-9 rounded animate-pulse" style={{ background: "var(--border)" }} />
             ) : (
               <>
-                <div className="text-3xl font-bold" style={{ color: "#f0883e" }}>
+                <div className="text-4xl font-bold tracking-tight" style={{ color: "#f0883e" }}>
                   {sem ?? "—"}
                 </div>
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
