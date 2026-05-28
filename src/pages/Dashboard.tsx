@@ -61,7 +61,7 @@ const FILTER_OPTIONS: { label: string; value: FilterPeriod }[] = [
   { label: "Período", value: "custom" },
 ];
 
-const DEFAULT_SECTION_ORDER = ["followup", "qualificacao-ia", "consultas", "visao-geral", "secoes", "atendimento"];
+const DEFAULT_SECTION_ORDER = ["followup", "qualificacao-ia", "consultas", "etapas-funil", "visao-geral", "secoes", "atendimento"];
 const FEB_2026 = Math.floor(new Date(2026, 1, 1).getTime() / 1000);
 const SECTION_ORDER_KEY = "kommo_section_order";
 
@@ -371,6 +371,7 @@ export default function Dashboard() {
       ...(hasFup && isMainOrAll ? ["followup"] : []),
       ...(hasAIQualif ? ["qualificacao-ia"] : []),
       ...(hasPlanos && (isMainOrAll || isClientePipeline) ? ["consultas"] : []),
+      "etapas-funil",
       "visao-geral",
       "secoes",
       "atendimento",
@@ -1004,6 +1005,79 @@ export default function Dashboard() {
     );
   }
 
+  function renderEtapasFunil() {
+    const pid = hasPipelineNames
+      ? (activeFunilPipelineId ?? pipelines.FUNIL_ID)
+      : activeFunilTab === "vendas"
+      ? pipelines.FUNIL_ID
+      : pipelines.CLIENTES_ID;
+
+    return (
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div
+            draggable
+            onDragStart={() => onDragStart("etapas-funil")}
+            onDragEnd={onDragEnd}
+            style={{ cursor: "grab", touchAction: "none" }}
+            title="Arrastar para reordenar"
+          >
+            <GripVertical size={14} style={{ color: "var(--muted)", opacity: 0.5 }} />
+          </div>
+          <BarChart3 size={14} style={{ color: "var(--green)" }} />
+          <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+            Etapas do Funil
+          </h2>
+          {hasPipelineNames && (
+            <div className="ml-auto flex flex-wrap gap-1">
+              {Object.entries(pipelineNames)
+                .filter(([, entry]) => !entry.lixeira)
+                .map(([idStr, entry]) => {
+                  const id = Number(idStr);
+                  const isAct = (activeFunilPipelineId ?? pipelines.FUNIL_ID) === id;
+                  return (
+                    <button
+                      key={idStr}
+                      onClick={() => setActiveFunilPipelineId(id)}
+                      className="px-2 py-0.5 rounded text-xs font-medium transition-colors"
+                      style={{
+                        background: isAct ? "var(--green)" : "var(--border)",
+                        color: isAct ? "#fff" : "var(--muted)",
+                      }}
+                    >
+                      {entry.name}
+                    </button>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          {activeFunilItems.map((item) => {
+            const sid = (item as { statusId?: number }).statusId;
+            const isAct = activeStageDrawer?.key === item.key && activeStageDrawer?.pipelineId === pid;
+            return (
+              <KPICard
+                key={item.key}
+                title={item.label}
+                value={item.value}
+                subtitle="leads no período"
+                icon={<Users size={14} />}
+                color={item.color ?? "var(--green)"}
+                loading={loading}
+                active={isAct}
+                onClick={sid ? () => {
+                  setActiveDrawer(null);
+                  setActiveStageDrawer(isAct ? null : { key: item.key, label: item.label, statusId: sid, pipelineId: pid });
+                } : undefined}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   function renderVisaoGeral() {
     return (
       <div>
@@ -1483,6 +1557,7 @@ export default function Dashboard() {
     followup: renderFollowUp,
     "qualificacao-ia": renderQualificacaoIA,
     consultas: renderConsultas,
+    "etapas-funil": renderEtapasFunil,
     "visao-geral": renderVisaoGeral,
     secoes: renderSecoes,
     atendimento: renderAtendimento,
