@@ -13,6 +13,7 @@ interface ClientConfigValue {
   pipelineNames: Record<string, PipelineEntry>;
   uazapiUrl: string | null;
   gptmakerWorkspaceId: string | null;
+  hiddenSections: string[];
   loading: boolean;
   error: string | null;
 }
@@ -32,6 +33,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
   const [pipelineNames, setPipelineNames] = useState<Record<string, PipelineEntry>>({});
   const [uazapiUrl, setUazapiUrl] = useState<string | null>(null);
   const [gptmakerWorkspaceId, setGptmakerWorkspaceId] = useState<string | null>(null);
+  const [hiddenSections, setHiddenSections] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +46,7 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     supabase
       .from("client_configs")
-      .select("subdomain, client_name, pipelines, field_ids, stage_labels, pipeline_names, uazapi_url, gptmaker_workspace_id")
+      .select("subdomain, client_name, pipelines, field_ids, stage_labels, pipeline_names, uazapi_url, gptmaker_workspace_id, hidden_sections")
       .eq("user_id", user.id)
       .single()
       .then(({ data, error: err }) => {
@@ -59,13 +61,14 @@ export function ClientConfigProvider({ children }: { children: ReactNode }) {
           setPipelineNames((data.pipeline_names as Record<string, PipelineEntry>) ?? {});
           setUazapiUrl(data.uazapi_url ?? null);
           setGptmakerWorkspaceId(data.gptmaker_workspace_id ?? null);
+          setHiddenSections((data.hidden_sections as string[]) ?? []);
         }
         setLoading(false);
       });
   }, [user?.id]);
 
   return (
-    <ClientConfigContext.Provider value={{ subdomain, clientName, pipelines, fieldIds, stageLabels, pipelineNames, uazapiUrl, gptmakerWorkspaceId, loading, error }}>
+    <ClientConfigContext.Provider value={{ subdomain, clientName, pipelines, fieldIds, stageLabels, pipelineNames, uazapiUrl, gptmakerWorkspaceId, hiddenSections, loading, error }}>
       {children}
     </ClientConfigContext.Provider>
   );

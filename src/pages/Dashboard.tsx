@@ -125,7 +125,7 @@ export default function Dashboard() {
   const [triggeringFup, setTriggeringFup] = useState(false);
   const [triggerFupResult, setTriggerFupResult] = useState<{ success?: number; error?: string } | null>(null);
   const [fupConfirm, setFupConfirm] = useState(false);
-  const { subdomain, clientName, pipelines, fieldIds, stageLabels, pipelineNames, loading: configLoading } = useClientConfig();
+  const { subdomain, clientName, pipelines, fieldIds, stageLabels, pipelineNames, hiddenSections, loading: configLoading } = useClientConfig();
 
   const todayStr = new Date().toISOString().split("T")[0];
   const thirtyAgoStr = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
@@ -1798,7 +1798,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Seções reordenáveis ────────────────────────────────────────────── */}
-      {sectionOrder.filter((id) => availableSections.has(id)).map((id) => (
+      {sectionOrder.filter((id) => availableSections.has(id) && !hiddenSections.includes(id)).map((id) => (
         <div
           key={id}
           onDragOver={(e) => onDragOver(e, id)}
