@@ -546,14 +546,20 @@ export default function Dashboard() {
       if (key.includes("CONFIRMADA")) return "#58a6ff";
       return undefined;
     };
+    const pipelinesMap = pipelines as unknown as Record<string, unknown>;
     const items = FUNIL_STAGES.map((s) => {
       const label = stageLabels[s.key] ?? s.label;
-      return { key: s.key, label, value: kpis.byStage[s.key] ?? 0, color: getColor(s.key, label) };
+      const sid = pipelinesMap[s.key];
+      return {
+        key: s.key, label, value: kpis.byStage[s.key] ?? 0, color: getColor(s.key, label),
+        statusId: typeof sid === "number" && sid > 0 ? sid : undefined,
+      };
     });
     for (const [key, value] of Object.entries(kpis.byStage)) {
       if (!knownKeys.has(key)) {
         const label = stageLabels[key] ?? key.replace("status_", "Etapa ");
-        items.push({ key, label, value, color: getColor(key, label) });
+        const n = key.startsWith("status_") ? parseInt(key.replace("status_", ""), 10) : NaN;
+        items.push({ key, label, value, color: getColor(key, label), statusId: isNaN(n) ? undefined : n });
       }
     }
     return items.filter((i) => i.value > 0);
@@ -1203,18 +1209,7 @@ export default function Dashboard() {
               <div className="space-y-1.5">
                 {activeFunilItems.map((item) => {
                   const pct = Math.round((item.value / Math.max(activeFunilTotal, 1)) * 100);
-                  // Derive statusId: from item directly, from pipelines config key, or from "status_NNN" key
-                  const sid: number | undefined =
-                    (item as { statusId?: number }).statusId ??
-                    (() => {
-                      const fromConfig = (pipelines as unknown as Record<string, unknown>)[item.key];
-                      if (typeof fromConfig === "number" && fromConfig > 0) return fromConfig;
-                      if (item.key.startsWith("status_")) {
-                        const n = parseInt(item.key.replace("status_", ""), 10);
-                        return isNaN(n) ? undefined : n;
-                      }
-                      return undefined;
-                    })();
+                  const sid = (item as { statusId?: number }).statusId;
                   const pid = hasPipelineNames
                     ? (activeFunilPipelineId ?? pipelines.FUNIL_ID)
                     : activeFunilTab === "vendas"
