@@ -21,6 +21,8 @@ import {
   MessageSquare,
   CheckCheck,
   Stethoscope,
+  Zap,
+  Loader2,
 } from "lucide-react";
 import type { FilterPeriod } from "../lib/types";
 import type { KommoLead } from "../lib/types";
@@ -31,6 +33,7 @@ import {
   fetchPipelines,
   leadInPeriod,
   periodTimestamps,
+  patchLeads,
 } from "../lib/kommo-api";
 import { formatBizTime, detectClosure, firstResponseMinutes } from "../lib/business-hours";
 import { computeKPIs, computeFollowUpRate, FUNIL_STAGES, CLIENTES_PLANOS } from "../lib/kpis";
@@ -107,6 +110,9 @@ export default function Dashboard() {
   const [activeStageDrawer, setActiveStageDrawer] = useState<{
     key: string; label: string; statusId: number; pipelineId: number | null;
   } | null>(null);
+  const [triggeringFup, setTriggeringFup] = useState(false);
+  const [triggerFupResult, setTriggerFupResult] = useState<{ success?: number; error?: string } | null>(null);
+  const [fupConfirm, setFupConfirm] = useState(false);
   const { subdomain, clientName, pipelines, fieldIds, stageLabels, pipelineNames, loading: configLoading } = useClientConfig();
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -651,6 +657,28 @@ export default function Dashboard() {
 
   const fupRate = followUpRate;
 
+  // ── FUP bot trigger ────────────────────────────────────────────────────────
+  async function triggerFupBots() {
+    const transitId = pipelines.CONSULTA_NAO_CONFIRMADA;
+    if (!kpis || !transitId) return;
+    const fupLeads = kpis.fupLeads;
+    if (fupLeads.length === 0) return;
+    setTriggeringFup(true);
+    setTriggerFupResult(null);
+    setFupConfirm(false);
+    try {
+      const originals = fupLeads.map((l) => ({ id: l.id, status_id: l.status_id }));
+      await patchLeads(fupLeads.map((l) => ({ id: l.id, status_id: transitId })));
+      await new Promise((r) => setTimeout(r, 2000));
+      await patchLeads(originals);
+      setTriggerFupResult({ success: fupLeads.length });
+    } catch (err) {
+      setTriggerFupResult({ error: (err as Error).message });
+    } finally {
+      setTriggeringFup(false);
+    }
+  }
+
   // ── Section renderers ──────────────────────────────────────────────────────
   function renderFollowUp() {
     return (
@@ -674,19 +702,65 @@ export default function Dashboard() {
               Follow-up
             </h2>
           </div>
-          {fupRate && (
-            <div className="flex items-center gap-1.5">
-              <Percent size={12} style={{ color: "#d29922" }} />
-              <span className="text-sm font-bold" style={{ color: "#d29922" }}>
-                {fupRate.taxaFollowUp === 0 && fupRate.fupEntradas > 0
-                  ? "<1%"
-                  : `${fupRate.taxaFollowUp}%`}{" "}
-                <span className="text-xs font-normal" style={{ color: "var(--muted)" }}>
-                  de reativação
+          <div className="ml-auto flex items-center gap-3">
+            {fupRate && (
+              <div className="flex items-center gap-1.5">
+                <Percent size={12} style={{ color: "#d29922" }} />
+                <span className="text-sm font-bold" style={{ color: "#d29922" }}>
+                  {fupRate.taxaFollowUp === 0 && fupRate.fupEntradas > 0
+                    ? "<1%"
+                    : `${fupRate.taxaFollowUp}%`}{" "}
+                  <span className="text-xs font-normal" style={{ color: "var(--muted)" }}>
+                    de reativação
+                  </span>
                 </span>
+              </div>
+            )}
+            {pipelines.CONSULTA_NAO_CONFIRMADA > 0 && kpis && kpis.fupLeads.length > 0 && (
+              fupConfirm ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs" style={{ color: "var(--muted)" }}>
+                    Disparar para {kpis.fupLeads.length} leads?
+                  </span>
+                  <button
+                    onClick={triggerFupBots}
+                    disabled={triggeringFup}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                    style={{ background: "#f0883e", color: "#fff", opacity: triggeringFup ? 0.6 : 1 }}
+                  >
+                    {triggeringFup ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
+                    {triggeringFup ? "Disparando..." : "Confirmar"}
+                  </button>
+                  <button
+                    onClick={() => setFupConfirm(false)}
+                    className="text-xs px-2 py-1 rounded"
+                    style={{ color: "var(--muted)" }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setFupConfirm(true); setTriggerFupResult(null); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
+                  style={{ background: "var(--card)", borderColor: "#f0883e", color: "#f0883e" }}
+                >
+                  <Zap size={11} />
+                  Disparar Bot FUP
+                </button>
+              )
+            )}
+            {triggerFupResult?.success && (
+              <span className="text-xs font-medium" style={{ color: "#3fb950" }}>
+                ✓ {triggerFupResult.success} leads re-acionados
               </span>
-            </div>
-          )}
+            )}
+            {triggerFupResult?.error && (
+              <span className="text-xs" style={{ color: "#f85149" }}>
+                Erro: {triggerFupResult.error.slice(0, 60)}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-4">

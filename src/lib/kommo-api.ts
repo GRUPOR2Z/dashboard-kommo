@@ -21,6 +21,18 @@ async function kommoGet<T>(path: string): Promise<T> {
   return res.json();
 }
 
+export async function patchLeads(updates: { id: number; status_id: number }[]): Promise<void> {
+  const res = await fetch(`${BASE}/leads`, {
+    method: "PATCH",
+    headers: await authHeader(),
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text();
+    throw new Error(`Kommo PATCH ${res.status}: ${text.slice(0, 200)}`);
+  }
+}
+
 // ── Account (test connection) ────────────────────────────────────────────────
 export async function testConnection() {
   const data = await kommoGet<{ id: number; name: string; subdomain: string }>(
