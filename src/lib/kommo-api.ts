@@ -101,24 +101,37 @@ export async function fetchStatusEvents(
   return all;
 }
 
-// ── Chat conversations (notes type 203/204 = incoming/outgoing chat) ─────────
+// ── Chat conversations via Talks API (Kommo inbox) ────────────────────────────
 export async function fetchChatLeadIds(from: number, to: number): Promise<Set<number>> {
   const ids = new Set<number>();
-  // 203 = incoming chat message, 204 = outgoing chat message
-  const typeFilter = "filter[note_type][]=203&filter[note_type][]=204";
+
+  // Talks = Kommo inbox conversations. Filter by last_modified in period.
   for (let page = 1; page <= 40; page++) {
     const data = await kommoGet<{
-      _embedded?: { notes?: Array<{ entity_id?: number; created_at?: number }> };
-    }>(
-      `/leads/notes?${typeFilter}&filter[created_at][from]=${from}&filter[created_at][to]=${to}&limit=250&page=${page}`
-    );
-    const notes = data._embedded?.notes ?? [];
-    if (notes.length === 0) break;
-    for (const n of notes) {
-      if (n.entity_id) ids.add(n.entity_id);
+      _embedded?: { talks?: Array<{ entity_id?: number; entity_type?: string; last_modified?: number }> };
+    }>(`/talks?filter[last_modified][from]=${from}&filter[last_modified][to]=${to}&limit=250&page=${page}`);
+    const talks = data._embedded?.talks ?? [];
+    if (talks.length === 0) break;
+    for (const t of talks) {
+      if (t.entity_id && t.entity_type === "leads") ids.add(t.entity_id);
     }
     if (ids.size >= 5000) break;
   }
+
+  if (ids.size > 0) return ids;
+
+  // Fallback: events endpoint
+  const eventTypes = "filter[type][]=incoming_chat_message&filter[type][]=outgoing_chat_message";
+  for (let page = 1; page <= 40; page++) {
+    const data = await kommoGet<{
+      _embedded?: { events?: Array<{ entity_id?: number }> };
+    }>(`/events?${eventTypes}&filter[created_at][from]=${from}&filter[created_at][to]=${to}&limit=250&page=${page}`);
+    const evts = data._embedded?.events ?? [];
+    if (evts.length === 0) break;
+    for (const e of evts) if (e.entity_id) ids.add(e.entity_id);
+    if (ids.size >= 5000) break;
+  }
+
   return ids;
 }
 
