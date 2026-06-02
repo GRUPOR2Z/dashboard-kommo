@@ -593,6 +593,37 @@ export default function Dashboard() {
     return leadsFromIds(periodStageLeadIds.get(activeStageDrawer.statusId));
   }, [activeStageDrawer, periodStageLeadIds]);
 
+  // Stages to show in "Etapas do Funil" — built from periodStageLeadIds so
+  // all stages with activity in the period appear (not just those with new leads).
+  const etapasFunilItems = useMemo(() => {
+    const planStatusIds = new Set([pipelines.AVULSA, pipelines.TRIMESTRAL, pipelines.SEMESTRAL, pipelines.ANUAL].filter(Boolean));
+    const statusToKey = new Map<number, string>();
+    for (const [key, val] of Object.entries(pipelines)) {
+      if (typeof val === "number" && val > 0) statusToKey.set(val, key);
+    }
+    const getColor = (key: string, label: string): string | undefined => {
+      if (key === "GANHO") return "var(--green)";
+      if (key.includes("PERDIDO")) return "#f85149";
+      if (key.includes("FUP") || label.toLowerCase().includes("fup")) return "#f0883e";
+      if (label.toLowerCase().includes("respec")) return "#d29922";
+      if (key.includes("CONFIRMADA")) return "#58a6ff";
+      return undefined;
+    };
+    const stageOrder = new Map(FUNIL_STAGES.map((s, i) => [s.key, i]));
+    const items: { key: string; label: string; statusId: number; count: number; color: string | undefined }[] = [];
+    for (const [statusId, ids] of periodStageLeadIds) {
+      if (ids.size === 0 || planStatusIds.has(statusId)) continue;
+      const configKey = statusToKey.get(statusId) ?? `status_${statusId}`;
+      const label = stageLabels[`status_${statusId}`] ?? stageLabels[configKey] ?? configKey.replace(/_/g, " ");
+      items.push({ key: configKey, label, statusId, count: ids.size, color: getColor(configKey, label) });
+    }
+    return items.sort((a, b) => {
+      const ao = stageOrder.get(a.key) ?? 999;
+      const bo = stageOrder.get(b.key) ?? 999;
+      return ao !== bo ? ao - bo : b.count - a.count;
+    });
+  }, [periodStageLeadIds, pipelines, stageLabels]);
+
   function toggleDrawer(d: ActiveDrawer) {
     setActiveStageDrawer(null);
     setActiveDrawer((prev) => (prev === d ? null : d));
@@ -1185,24 +1216,22 @@ export default function Dashboard() {
           )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {activeFunilItems.map((item) => {
-            const sid = (item as { statusId?: number }).statusId;
-            const count = sid ? (periodStageLeadIds.get(sid)?.size ?? 0) : item.value;
-            const isAct = activeStageDrawer?.key === item.key && activeStageDrawer?.pipelineId === pid;
+          {etapasFunilItems.map((item) => {
+            const isAct = activeStageDrawer?.statusId === item.statusId;
             return (
               <KPICard
                 key={item.key}
                 title={item.label}
-                value={count}
+                value={item.count}
                 subtitle={period === "todos" ? "leads nesta etapa" : "movidos no período"}
                 icon={<Users size={14} />}
                 color={item.color ?? "var(--green)"}
                 loading={loading}
                 active={isAct}
-                onClick={sid ? () => {
+                onClick={() => {
                   setActiveDrawer(null);
-                  setActiveStageDrawer(isAct ? null : { key: item.key, label: item.label, statusId: sid, pipelineId: pid });
-                } : undefined}
+                  setActiveStageDrawer(isAct ? null : { key: item.key, label: item.label, statusId: item.statusId, pipelineId: pid });
+                }}
               />
             );
           })}
