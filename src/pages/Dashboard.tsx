@@ -434,6 +434,31 @@ export default function Dashboard() {
     };
   }, [notesSampleMap]);
 
+  // Maps statusId → Set of leadIds that entered that stage in the period.
+  // "todos" → current leads in each stage; other periods → status events.
+  const periodStageLeadIds = useMemo(() => {
+    const map = new Map<number, Set<number>>();
+    if (period === "todos") {
+      for (const [, leads] of pipelineLeadsMap) {
+        for (const lead of leads) {
+          if (!map.has(lead.status_id)) map.set(lead.status_id, new Set());
+          map.get(lead.status_id)!.add(lead.id);
+        }
+      }
+      return map;
+    }
+    if (!statusEvents) return map;
+    const todayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+    const now = Math.floor(Date.now() / 1000);
+    for (const e of statusEvents) {
+      if (eventInPeriod(e.created_at, period, todayStart, now, customDates)) {
+        if (!map.has(e.status_after)) map.set(e.status_after, new Set());
+        map.get(e.status_after)!.add(e.lead_id);
+      }
+    }
+    return map;
+  }, [pipelineLeadsMap, statusEvents, period, customDates]);
+
   const consultasConfirmadasData = useMemo(() => {
     const todayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
     const now = Math.floor(Date.now() / 1000);
@@ -543,36 +568,30 @@ export default function Dashboard() {
     return result.sort((a, b) => b.updated_at - a.updated_at);
   }, [chatLeadIds, pipelineLeadsMap, pipelineNames]);
 
-  const avulsaLeads = useMemo(
-    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.AVULSA && (period === "todos" || leadInPeriod(l, period, customDates))),
-    [clientesLeads, pipelines, period, customDates]
-  );
-  const trimestralLeads = useMemo(
-    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.TRIMESTRAL && (period === "todos" || leadInPeriod(l, period, customDates))),
-    [clientesLeads, pipelines, period, customDates]
-  );
-  const semestralLeads = useMemo(
-    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.SEMESTRAL && (period === "todos" || leadInPeriod(l, period, customDates))),
-    [clientesLeads, pipelines, period, customDates]
-  );
-  const anualLeads = useMemo(
-    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.ANUAL && (period === "todos" || leadInPeriod(l, period, customDates))),
-    [clientesLeads, pipelines, period, customDates]
-  );
+  function leadsFromIds(ids: Set<number> | undefined): KommoLead[] {
+    if (!ids || ids.size === 0) return [];
+    const result: KommoLead[] = [];
+    const seen = new Set<number>();
+    for (const [, leads] of pipelineLeadsMap) {
+      for (const l of leads) {
+        if (!seen.has(l.id) && ids.has(l.id)) { seen.add(l.id); result.push(l); }
+      }
+    }
+    for (const id of ids) {
+      if (!seen.has(id)) result.push({ id, name: `Lead #${id}`, price: 0, created_at: 0, updated_at: 0, closed_at: null, pipeline_id: 0, status_id: 0, custom_fields_values: null });
+    }
+    return result;
+  }
+
+  const avulsaLeads    = useMemo(() => leadsFromIds(periodStageLeadIds.get(pipelines.AVULSA)),    [periodStageLeadIds, pipelines.AVULSA]);
+  const trimestralLeads = useMemo(() => leadsFromIds(periodStageLeadIds.get(pipelines.TRIMESTRAL)), [periodStageLeadIds, pipelines.TRIMESTRAL]);
+  const semestralLeads  = useMemo(() => leadsFromIds(periodStageLeadIds.get(pipelines.SEMESTRAL)),  [periodStageLeadIds, pipelines.SEMESTRAL]);
+  const anualLeads      = useMemo(() => leadsFromIds(periodStageLeadIds.get(pipelines.ANUAL)),      [periodStageLeadIds, pipelines.ANUAL]);
 
   const stageDrawerLeads = useMemo(() => {
     if (!activeStageDrawer) return [];
-    const { statusId, pipelineId } = activeStageDrawer;
-    const candidates: KommoLead[] = [];
-    if (pipelineId !== null) {
-      candidates.push(...(pipelineLeadsMap.get(pipelineId) ?? []));
-    } else {
-      for (const [, leads] of pipelineLeadsMap) candidates.push(...leads);
-    }
-    return candidates
-      .filter((l) => l.status_id === statusId)
-      .filter((l) => leadInPeriod(l, period, customDates));
-  }, [activeStageDrawer, pipelineLeadsMap, period, customDates]);
+    return leadsFromIds(periodStageLeadIds.get(activeStageDrawer.statusId));
+  }, [activeStageDrawer, periodStageLeadIds]);
 
   function toggleDrawer(d: ActiveDrawer) {
     setActiveStageDrawer(null);
@@ -1168,13 +1187,14 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {activeFunilItems.map((item) => {
             const sid = (item as { statusId?: number }).statusId;
+            const count = sid ? (periodStageLeadIds.get(sid)?.size ?? 0) : item.value;
             const isAct = activeStageDrawer?.key === item.key && activeStageDrawer?.pipelineId === pid;
             return (
               <KPICard
                 key={item.key}
                 title={item.label}
-                value={item.value}
-                subtitle="leads no período"
+                value={count}
+                subtitle={period === "todos" ? "leads nesta etapa" : "movidos no período"}
                 icon={<Users size={14} />}
                 color={item.color ?? "var(--green)"}
                 loading={loading}
