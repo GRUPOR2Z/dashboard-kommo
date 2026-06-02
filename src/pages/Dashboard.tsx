@@ -518,9 +518,8 @@ export default function Dashboard() {
     return buildDrawerLeads(followUpRate.ignoradosLeadIds, funilLeads);
   }, [followUpRate, funilLeads]);
 
-  const conversasOntemLeads = useMemo(() => {
-    const todayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
-    const yesterdayStart = todayStart - 86400;
+  const conversasPeriodoLeads = useMemo(() => {
+    const { from, to } = periodTimestamps(period, customDates);
     const seen = new Set<number>();
     const result: KommoLead[] = [];
     for (const [pipeId, leads] of pipelineLeadsMap) {
@@ -528,8 +527,8 @@ export default function Dashboard() {
       for (const lead of leads) {
         if (
           !seen.has(lead.id) &&
-          lead.updated_at >= yesterdayStart &&
-          lead.updated_at < todayStart
+          lead.updated_at >= from &&
+          lead.updated_at <= to
         ) {
           seen.add(lead.id);
           result.push(lead);
@@ -537,7 +536,7 @@ export default function Dashboard() {
       }
     }
     return result.sort((a, b) => b.updated_at - a.updated_at);
-  }, [pipelineLeadsMap, pipelineNames]);
+  }, [pipelineLeadsMap, pipelineNames, period, customDates]);
 
   const avulsaLeads = useMemo(
     () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.AVULSA),
@@ -1227,9 +1226,9 @@ export default function Dashboard() {
             active={activeDrawer === "convertidos"}
           />
           <KPICard
-            title="Conversas Ontem"
-            value={conversasOntemLeads.length}
-            subtitle="Tiveram atividade ontem"
+            title="Conversas"
+            value={conversasPeriodoLeads.length}
+            subtitle="Atividade no período"
             icon={<MessageSquare size={14} />}
             color="#58a6ff"
             loading={loading}
@@ -1928,8 +1927,8 @@ export default function Dashboard() {
 
       {activeDrawer === "conversas-ontem" && (
         <LeadDrawer
-          title={`Conversas de Ontem — ${conversasOntemLeads.length} leads`}
-          leads={conversasOntemLeads}
+          title={`Conversas — ${FILTER_OPTIONS.find(f => f.value === period)?.label ?? period} (${conversasPeriodoLeads.length})`}
+          leads={conversasPeriodoLeads}
           onClose={() => setActiveDrawer(null)}
           subdomain={subdomain}
         />
