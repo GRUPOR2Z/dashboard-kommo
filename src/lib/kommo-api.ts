@@ -101,6 +101,27 @@ export async function fetchStatusEvents(
   return all;
 }
 
+// ── Chat conversations (notes type 203/204 = incoming/outgoing chat) ─────────
+export async function fetchChatLeadIds(from: number, to: number): Promise<Set<number>> {
+  const ids = new Set<number>();
+  // 203 = incoming chat message, 204 = outgoing chat message
+  const typeFilter = "filter[note_type][]=203&filter[note_type][]=204";
+  for (let page = 1; page <= 40; page++) {
+    const data = await kommoGet<{
+      _embedded?: { notes?: Array<{ entity_id?: number; created_at?: number }> };
+    }>(
+      `/leads/notes?${typeFilter}&filter[created_at][from]=${from}&filter[created_at][to]=${to}&limit=250&page=${page}`
+    );
+    const notes = data._embedded?.notes ?? [];
+    if (notes.length === 0) break;
+    for (const n of notes) {
+      if (n.entity_id) ids.add(n.entity_id);
+    }
+    if (ids.size >= 5000) break;
+  }
+  return ids;
+}
+
 // ── Lead notes ───────────────────────────────────────────────────────────────
 export async function fetchLeadNotes(leadId: number): Promise<KommoNote[]> {
   const all: KommoNote[] = [];

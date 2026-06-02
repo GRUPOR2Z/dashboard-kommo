@@ -33,6 +33,7 @@ import {
   leadInPeriod,
   periodTimestamps,
   patchLeads,
+  fetchChatLeadIds,
 } from "../lib/kommo-api";
 import { formatBizTime, detectClosure, firstResponseMinutes } from "../lib/business-hours";
 import { computeKPIs, computeFollowUpRate, FUNIL_STAGES, CLIENTES_PLANOS } from "../lib/kpis";
@@ -518,25 +519,29 @@ export default function Dashboard() {
     return buildDrawerLeads(followUpRate.ignoradosLeadIds, funilLeads);
   }, [followUpRate, funilLeads]);
 
+  const { from: chatFrom, to: chatTo } = periodTimestamps(period, customDates);
+  const { data: chatLeadIds, isLoading: chatLoading } = useQuery({
+    queryKey: ["chat-lead-ids", chatFrom, chatTo],
+    queryFn: () => fetchChatLeadIds(chatFrom, chatTo),
+    enabled: !configLoading,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const conversasPeriodoLeads = useMemo(() => {
-    const { from, to } = periodTimestamps(period, customDates);
-    const seen = new Set<number>();
+    if (!chatLeadIds) return [];
     const result: KommoLead[] = [];
+    const seen = new Set<number>();
     for (const [pipeId, leads] of pipelineLeadsMap) {
       if (pipelineNames[String(pipeId)]?.lixeira) continue;
       for (const lead of leads) {
-        if (
-          !seen.has(lead.id) &&
-          lead.updated_at >= from &&
-          lead.updated_at <= to
-        ) {
+        if (!seen.has(lead.id) && chatLeadIds.has(lead.id)) {
           seen.add(lead.id);
           result.push(lead);
         }
       }
     }
     return result.sort((a, b) => b.updated_at - a.updated_at);
-  }, [pipelineLeadsMap, pipelineNames, period, customDates]);
+  }, [chatLeadIds, pipelineLeadsMap, pipelineNames]);
 
   const avulsaLeads = useMemo(
     () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.AVULSA),
@@ -1228,10 +1233,10 @@ export default function Dashboard() {
           <KPICard
             title="Conversas"
             value={conversasPeriodoLeads.length}
-            subtitle="Atividade no período"
+            subtitle="Mensagens no período"
             icon={<MessageSquare size={14} />}
             color="#58a6ff"
-            loading={loading}
+            loading={loading || chatLoading}
             onClick={() => toggleDrawer("conversas-ontem")}
             active={activeDrawer === "conversas-ontem"}
           />
