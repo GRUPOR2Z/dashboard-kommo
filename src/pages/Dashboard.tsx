@@ -12,7 +12,6 @@ import {
   BarChart3,
   Activity,
   Clock,
-  RotateCcw,
   XCircle,
   Percent,
   CalendarCheck,
@@ -53,6 +52,7 @@ type ActiveDrawer =
   | "trimestral"
   | "semestral"
   | "anual"
+  | "conversas-ontem"
   | null;
 
 const FILTER_OPTIONS: { label: string; value: FilterPeriod }[] = [
@@ -517,6 +517,27 @@ export default function Dashboard() {
     if (!followUpRate) return [];
     return buildDrawerLeads(followUpRate.ignoradosLeadIds, funilLeads);
   }, [followUpRate, funilLeads]);
+
+  const conversasOntemLeads = useMemo(() => {
+    const todayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+    const yesterdayStart = todayStart - 86400;
+    const seen = new Set<number>();
+    const result: KommoLead[] = [];
+    for (const [pipeId, leads] of pipelineLeadsMap) {
+      if (pipelineNames[String(pipeId)]?.lixeira) continue;
+      for (const lead of leads) {
+        if (
+          !seen.has(lead.id) &&
+          lead.updated_at >= yesterdayStart &&
+          lead.updated_at < todayStart
+        ) {
+          seen.add(lead.id);
+          result.push(lead);
+        }
+      }
+    }
+    return result.sort((a, b) => b.updated_at - a.updated_at);
+  }, [pipelineLeadsMap, pipelineNames]);
 
   const avulsaLeads = useMemo(
     () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.AVULSA),
@@ -1206,6 +1227,16 @@ export default function Dashboard() {
             active={activeDrawer === "convertidos"}
           />
           <KPICard
+            title="Conversas Ontem"
+            value={conversasOntemLeads.length}
+            subtitle="Tiveram atividade ontem"
+            icon={<MessageSquare size={14} />}
+            color="#58a6ff"
+            loading={loading}
+            onClick={() => toggleDrawer("conversas-ontem")}
+            active={activeDrawer === "conversas-ontem"}
+          />
+          <KPICard
             title="Taxa de Conversão"
             value={kpis ? `${kpis.taxaConversao}%` : "—"}
             subtitle="Lead → consulta concluída"
@@ -1890,6 +1921,15 @@ export default function Dashboard() {
         <LeadDrawer
           title="Clientes — Plano Anual"
           leads={anualLeads}
+          onClose={() => setActiveDrawer(null)}
+          subdomain={subdomain}
+        />
+      )}
+
+      {activeDrawer === "conversas-ontem" && (
+        <LeadDrawer
+          title={`Conversas de Ontem — ${conversasOntemLeads.length} leads`}
+          leads={conversasOntemLeads}
           onClose={() => setActiveDrawer(null)}
           subdomain={subdomain}
         />
