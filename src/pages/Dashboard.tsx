@@ -544,20 +544,20 @@ export default function Dashboard() {
   }, [chatLeadIds, pipelineLeadsMap, pipelineNames]);
 
   const avulsaLeads = useMemo(
-    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.AVULSA),
-    [clientesLeads, pipelines]
+    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.AVULSA && (period === "todos" || leadInPeriod(l, period, customDates))),
+    [clientesLeads, pipelines, period, customDates]
   );
   const trimestralLeads = useMemo(
-    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.TRIMESTRAL),
-    [clientesLeads, pipelines]
+    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.TRIMESTRAL && (period === "todos" || leadInPeriod(l, period, customDates))),
+    [clientesLeads, pipelines, period, customDates]
   );
   const semestralLeads = useMemo(
-    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.SEMESTRAL),
-    [clientesLeads, pipelines]
+    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.SEMESTRAL && (period === "todos" || leadInPeriod(l, period, customDates))),
+    [clientesLeads, pipelines, period, customDates]
   );
   const anualLeads = useMemo(
-    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.ANUAL),
-    [clientesLeads, pipelines]
+    () => (clientesLeads ?? []).filter((l) => l.status_id === pipelines.ANUAL && (period === "todos" || leadInPeriod(l, period, customDates))),
+    [clientesLeads, pipelines, period, customDates]
   );
 
   const stageDrawerLeads = useMemo(() => {
@@ -1075,7 +1075,7 @@ export default function Dashboard() {
           <KPICard
             title="Avulsa"
             value={avulsaLeads.length}
-            subtitle="Clientes com plano avulso"
+            subtitle={period === "todos" ? "Todos os clientes avulsa" : "Clientes avulsa no período"}
             icon={<UserRound size={14} />}
             color="#f0883e"
             loading={loading}
@@ -1085,7 +1085,7 @@ export default function Dashboard() {
           <KPICard
             title="Trimestral"
             value={trimestralLeads.length}
-            subtitle="Clientes trimestrais"
+            subtitle={period === "todos" ? "Todos os trimestrais" : "Clientes trimestrais no período"}
             icon={<Activity size={14} />}
             color="var(--green)"
             loading={loading}
@@ -1095,7 +1095,7 @@ export default function Dashboard() {
           <KPICard
             title="Semestral"
             value={semestralLeads.length}
-            subtitle="Clientes semestrais"
+            subtitle={period === "todos" ? "Todos os semestrais" : "Clientes semestrais no período"}
             icon={<TrendingUp size={14} />}
             color="#58a6ff"
             loading={loading}
@@ -1105,7 +1105,7 @@ export default function Dashboard() {
           <KPICard
             title="Anual"
             value={anualLeads.length}
-            subtitle="Clientes anuais"
+            subtitle={period === "todos" ? "Todos os anuais" : "Clientes anuais no período"}
             icon={<Users size={14} />}
             color="#a371f7"
             loading={loading}
