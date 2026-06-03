@@ -136,6 +136,27 @@ export async function fetchChatLeadIds(from: number, to: number): Promise<Set<nu
 }
 
 // ── Lead notes ───────────────────────────────────────────────────────────────
+export async function fetchLeadPhone(leadId: number): Promise<string | null> {
+  const data = await kommoGet<{
+    _embedded?: {
+      contacts?: Array<{
+        _embedded?: {
+          fields?: Array<{ field_code?: string; values?: Array<{ value: string }> }>;
+        };
+      }>;
+    };
+  }>(`/leads/${leadId}?with=contacts`);
+  const contacts = data._embedded?.contacts ?? [];
+  for (const c of contacts) {
+    for (const f of c._embedded?.fields ?? []) {
+      if (f.field_code === "PHONE" && f.values?.[0]?.value) {
+        return f.values[0].value.replace(/\D/g, "");
+      }
+    }
+  }
+  return null;
+}
+
 export async function fetchLeadNotes(leadId: number): Promise<KommoNote[]> {
   const all: KommoNote[] = [];
   for (let page = 1; page <= 5; page++) {

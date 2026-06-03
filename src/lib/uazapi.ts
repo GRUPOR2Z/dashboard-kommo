@@ -71,6 +71,23 @@ export async function fetchUazapiMessages(
     "/message/find",
     { chatid, limit }
   );
-  // API returns newest first — reverse to show oldest first
   return (data.messages ?? []).reverse();
+}
+
+// ── Send WhatsApp message via instance ───────────────────────────────────────
+export async function sendWhatsAppMessage(
+  instance: string,
+  phone: string,
+  text: string
+): Promise<void> {
+  const number = phone.replace(/\D/g, "");
+  const res = await fetch(`${BASE}/message/sendText/${instance}`, {
+    method: "POST",
+    headers: await authHeader(),
+    body: JSON.stringify({ number, text }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`UaZAPI ${res.status}: ${err.slice(0, 200)}`);
+  }
 }
